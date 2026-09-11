@@ -70,3 +70,11 @@ export function saveStore(data: Store) {
     // Read-only filesystem fallback
   }
 }
+
+export async function getStoreAsync(): Promise<Store> {
+  return getStore();
+}
+
+export async function saveStoreAsync(data: Store): Promise<void> {
+  saveStore(data);
+}

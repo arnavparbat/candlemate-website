@@ -1,4 +1,5 @@
-import { getStoreAsync, saveStoreAsync } from "@/lib/store";
+import { getStore, saveStore, getStoreAsync, saveStoreAsync } from "@/lib/store";
+import { isSupabaseConfigured, updateOrderStatusInSupabase } from "@/lib/supabase";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -11,18 +12,24 @@ export async function PATCH(
 ) {
   const { id } = await params;
   const { status } = await req.json();
+
   if (!valid.includes(status)) {
     return NextResponse.json({ error: "Invalid status" }, { status: 400 });
   }
 
-  const db = await getStoreAsync();
-  const order = db.orders.find((o) => o.id === id);
-  if (!order) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  // 1. Update in Supabase if configured
+  if (isSupabaseConfigured()) {
+    await updateOrderStatusInSupabase(id, status);
   }
 
-  order.status = status;
-  await saveStoreAsync(db);
-  return NextResponse.json(order);
-}
+  // 2. Fallback to local store
+  const db = getStore();
+  const order = db.orders.find((o) => o.id === id);
+  if (order) {
+    order.status = status;
+    saveStore(db);
+    return NextResponse.json(order);
+  }
 
+  return NextResponse.json({ id, status });
+}
