@@ -11,58 +11,61 @@ export default function Home() {
     <>
       <Header />
       <main>
+        {/* Compact Hero Section: Takes only ~1/3 of the tab on mobile */}
         <section className="grain overflow-hidden border-b border-[#5c39271a]">
-          <div className="mx-auto grid min-h-[560px] max-w-6xl items-center gap-12 px-5 py-16 md:grid-cols-[1.1fr_.9fr]">
+          <div className="mx-auto grid max-w-6xl items-center gap-4 px-4 py-4 sm:gap-12 sm:px-5 sm:py-16 grid-cols-[1.15fr_.85fr] md:grid-cols-[1.1fr_.9fr]">
             <div>
-              <p className="mb-5 text-xs font-bold uppercase tracking-[.24em] text-clay">
+              <p className="mb-1 sm:mb-4 text-[10px] sm:text-xs font-bold uppercase tracking-[.2em] text-clay">
                 Hand-poured in small batches
               </p>
-              <h1 className="display max-w-xl text-6xl leading-[.92] sm:text-7xl">
+              <h1 className="display max-w-xl text-2xl sm:text-6xl sm:leading-[.92] leading-tight text-ink">
                 Light a little <i className="font-normal text-clay">slower.</i>
               </h1>
-              <p className="mt-7 max-w-md leading-7 text-[#765442]">
-                Natural candles designed for evening rituals, unhurried conversations, and homes that feel like you.
+              <p className="mt-1 sm:mt-7 max-w-md text-xs sm:text-base sm:leading-7 text-[#765442] hidden xs:block">
+                Natural candles designed for evening rituals, unhurried conversations, and calm spaces.
               </p>
               <a
                 href="#shop"
-                className="mt-9 inline-block rounded-full bg-ink px-7 py-3 text-sm text-cream transition hover:bg-clay"
+                className="mt-2.5 sm:mt-8 inline-block rounded-full bg-ink px-3.5 py-1.5 sm:px-7 sm:py-3 text-xs sm:text-sm text-cream transition hover:bg-clay"
               >
                 Find your scent
               </a>
             </div>
 
-            <div className="relative mx-auto w-full max-w-[360px] sm:max-w-[400px]">
+            <div className="relative mx-auto w-full max-w-[150px] sm:max-w-[400px]">
               {/* Warm atmospheric glow behind the candle */}
-              <div className="absolute -inset-4 rounded-[42px] bg-[#e7c498]/50 blur-2xl -z-10" />
-              <div className="group relative overflow-hidden rounded-[36px] border border-[#5c39271f] bg-[#fff8ed] p-2 shadow-2xl shadow-[#b56b43]/25">
+              <div className="absolute -inset-2 sm:-inset-4 rounded-[22px] sm:rounded-[42px] bg-[#e7c498]/50 blur-lg sm:blur-2xl -z-10" />
+              <div className="group relative overflow-hidden rounded-[18px] sm:rounded-[36px] border border-[#5c39271f] bg-[#fff8ed] p-1 sm:p-2 shadow-lg sm:shadow-2xl shadow-[#b56b43]/20">
                 <img
                   src="/hero-candle.jpg"
                   alt="Lit handmade soy candle with glowing flame"
-                  className="h-[420px] w-full rounded-[28px] object-cover transition duration-700 ease-out group-hover:scale-105"
+                  className="h-28 sm:h-[420px] w-full rounded-[14px] sm:rounded-[28px] object-cover transition duration-700 ease-out group-hover:scale-105"
                 />
               </div>
             </div>
           </div>
         </section>
 
-        <section id="shop" className="mx-auto max-w-6xl px-5 py-20">
-          <div className="mb-9 flex items-end justify-between">
+        {/* Collection Section: Exactly 2 products per row on mobile */}
+        <section id="shop" className="mx-auto max-w-6xl px-3 sm:px-5 py-5 sm:py-20">
+          <div className="mb-3.5 sm:mb-9 flex items-end justify-between">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[.2em] text-clay">The collection</p>
-              <h2 className="display mt-2 text-4xl">Pouring warm light</h2>
+              <p className="text-[10px] sm:text-xs font-bold uppercase tracking-[.2em] text-clay">The collection</p>
+              <h2 className="display mt-0.5 text-xl sm:text-4xl text-ink">Pouring warm light</h2>
             </div>
             <p className="hidden max-w-xs text-right text-sm leading-6 text-[#765442] md:block">
               Clean-burning plant wax, quiet scents, and forms worth lingering over.
             </p>
           </div>
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+
+          <div className="grid grid-cols-2 gap-2.5 sm:gap-6 lg:grid-cols-4">
             {products.map((p) => (
               <ProductCard key={p.id} product={p} />
             ))}
           </div>
         </section>
       </main>
-      <footer className="border-t border-[#5c39271a] px-5 py-10 text-center text-sm text-[#765442]">
+      <footer className="border-t border-[#5c39271a] px-5 py-8 text-center text-xs sm:text-sm text-[#765442]">
         candlemate. made for slow moments · <a href="/admin" className="underline">studio login</a>
       </footer>
     </>
