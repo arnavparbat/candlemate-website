@@ -1,9 +1,12 @@
-import { getStore, saveStore, saveStoreAsync, SCREENSHOT_EXPIRY_MS } from "@/lib/store";
+import { getStore, saveStore, SCREENSHOT_EXPIRY_MS } from "@/lib/store";
 import { notifyStudioNewOrder } from "@/lib/order-events";
 import { Order } from "@/lib/types";
+import {
+  isSupabaseConfigured,
+  uploadScreenshotToSupabase,
+  insertOrderToSupabase,
+} from "@/lib/supabase";
 import { NextResponse } from "next/server";
-
-export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
   try {
@@ -24,7 +27,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Your bag is empty" }, { status: 400 });
     }
 
-    const db = getStore();
+    const orderId = `CM-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
     const total = body.items.reduce(
       (sum: number, i: any) => sum + Number(i.price) * Number(i.quantity),
       0
@@ -34,24 +37,42 @@ export async function POST(req: Request) {
     // Screenshot expires in 3 days (72 hours) to preserve cloud storage
     const screenshotExpiresAt = new Date(now.getTime() + SCREENSHOT_EXPIRY_MS).toISOString();
 
+    let finalScreenshot = body.screenshot;
+
+    // If Supabase is configured, upload screenshot to Supabase Storage bucket
+    // This turns a heavy 1.5MB Base64 payload into a fast ~60-byte CDN URL
+    if (isSupabaseConfigured() && body.screenshot) {
+      const publicUrl = await uploadScreenshotToSupabase(orderId, body.screenshot);
+      if (publicUrl) {
+        finalScreenshot = publicUrl;
+      }
+    }
+
     const order: Order = {
-      id: `CM-${Math.random().toString(36).slice(2, 7).toUpperCase()}`,
+      id: orderId,
       customer: body.customer,
       items: body.items,
       total,
       status: "Order Received",
-      screenshot: body.screenshot,
-      screenshotExpiresAt: body.screenshot ? screenshotExpiresAt : undefined,
+      screenshot: finalScreenshot,
+      screenshotExpiresAt: finalScreenshot ? screenshotExpiresAt : undefined,
       createdAt: now.toISOString(),
     };
 
-    db.orders.unshift(order);
-    await saveStoreAsync(db);
+    // 1. Insert into Supabase if configured (triggers Supabase Realtime WebSocket push to Studio)
+    if (isSupabaseConfigured()) {
+      await insertOrderToSupabase(order);
+    }
 
-    // Notify studio in real-time via Server-Sent Events
+    // 2. Persist to local store as fallback
+    const db = getStore();
+    db.orders.unshift(order);
+    saveStore(db);
+
+    // 3. Notify studio in real-time via Server-Sent Events (for local or node environments)
     notifyStudioNewOrder(order);
 
-    // If an external order server is configured, forward order to it as well
+    // 4. If an external dedicated order server is configured, forward order to it as well
     const externalServerUrl = process.env.ORDER_SERVER_URL || process.env.NEXT_PUBLIC_ORDER_SERVER_URL;
     if (externalServerUrl) {
       fetch(`${externalServerUrl.replace(/\/$/, "")}/api/orders`, {

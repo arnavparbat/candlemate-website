@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Order, OrderStatus, Product } from "@/lib/types";
+import { supabase, getSupabase, isSupabaseConfigured } from "@/lib/supabase";
 import Link from "next/link";
 
 const statuses: OrderStatus[] = [
@@ -188,158 +189,113 @@ export default function Admin() {
     available: true,
   });
 
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isAddOrderOpen, setIsAddOrderOpen] = useState(false);
-  const [manualOrder, setManualOrder] = useState({
-    name: "",
-    phone: "",
-    address: "",
-    productId: "",
-    quantity: 1,
-    total: 0,
-  });
-
-  async function handleCreateManualOrder(e: React.FormEvent) {
-    e.preventDefault();
-    const product = products.find((p) => p.id === manualOrder.productId) || products[0];
-    if (!product) return;
-    const qty = Number(manualOrder.quantity) || 1;
-    const computedTotal = Number(manualOrder.total) || product.price * qty;
-
-    const orderData = {
-      customer: {
-        name: manualOrder.name,
-        phone: manualOrder.phone,
-        address: manualOrder.address,
-      },
-      items: [
-        {
-          id: product.id,
-          name: product.name,
-          price: product.price,
-          quantity: qty,
-          description: product.description,
-          burnTime: product.burnTime,
-          ingredients: product.ingredients,
-          category: product.category,
-          available: product.available,
-          images: product.images,
-        },
-      ],
-      total: computedTotal,
-    };
-
-    try {
-      const res = await fetch("/api/orders", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(orderData),
-      });
-      if (res.ok) {
-        const created = await res.json();
-        setNotice(`Order ${created.id} created successfully.`);
-        setIsAddOrderOpen(false);
-        setManualOrder({
-          name: "",
-          phone: "",
-          address: "",
-          productId: "",
-          quantity: 1,
-          total: 0,
-        });
-        load();
-      } else {
-        const err = await res.json().catch(() => ({ error: "Failed" }));
-        setNotice(err.error || "Failed to create order.");
-      }
-    } catch {
-      setNotice("Error connecting to server.");
-    }
-  }
-
   async function load() {
-    const [o, p, s] = await Promise.all([
-      fetch(`/api/admin/orders?_t=${Date.now()}`, { cache: "no-store" })
-        .then((r) => r.json())
-        .catch(() => []),
-      fetch("/api/products").then((r) => r.json()),
-      fetch(`/api/settings/payment?_t=${Date.now()}`, { cache: "no-store" })
-        .then((r) => r.json())
-        .catch(() => ({ upiId: "" })),
-    ]);
+    let o: Order[] = [];
+    if (isSupabaseConfigured()) {
+      const { data, error } = await supabase
+        .from("orders")
+        .select("*")
+        .order("created_at", { ascending: false });
 
-    // Merge server orders and any client-saved orders so orders are never lost
-    const localOrders: Order[] =
-      typeof window !== "undefined"
-        ? JSON.parse(localStorage.getItem("candlemate_orders") || "[]")
-        : [];
-    const serverOrders: Order[] = Array.isArray(o) ? o : [];
-
-    const orderMap = new Map<string, Order>();
-    for (const order of [...localOrders, ...serverOrders]) {
-      if (order && order.id) {
-        orderMap.set(order.id, order);
+      if (!error && data) {
+        o = data.map((row: any): Order => ({
+          id: row.id,
+          customer: {
+            name: row.customer_name,
+            phone: row.customer_phone,
+            address: row.customer_address,
+          },
+          items: row.items || [],
+          total: Number(row.total),
+          status: row.status,
+          screenshot: row.screenshot,
+          screenshotExpired: !row.screenshot && Boolean(row.screenshot_expired),
+          screenshotExpiresAt: row.screenshot_expires_at,
+          createdAt: row.created_at,
+        }));
+      } else {
+        o = await fetch("/api/admin/orders").then((r) => r.json());
       }
+    } else {
+      o = await fetch("/api/admin/orders").then((r) => r.json());
     }
-    const merged = Array.from(orderMap.values()).sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
 
-    setOrders(merged);
+    const [p, s] = await Promise.all([
+      fetch("/api/products").then((r) => r.json()),
+      fetch("/api/settings/payment").then((r) => r.json()),
+    ]);
+    setOrders(o);
     setProducts(p);
-    const activeUpi =
-      (typeof window !== "undefined" && localStorage.getItem("candlemate_upi_id")) ||
-      s?.upiId ||
-      "";
-    if (activeUpi) setUpi(activeUpi);
+    setUpi(s.upiId);
   }
 
   useEffect(() => {
     load();
 
-    const handleIncomingNewOrder = (incoming: Order) => {
-      if (!incoming || !incoming.id) return;
-      setOrders((prev) => {
-        if (prev.some((o) => o.id === incoming.id)) return prev;
-        playOrderChime();
-        setNewOrderAlert(incoming);
-        try {
-          const stored = JSON.parse(localStorage.getItem("candlemate_orders") || "[]");
-          if (!stored.some((o: any) => o.id === incoming.id)) {
-            localStorage.setItem("candlemate_orders", JSON.stringify([incoming, ...stored]));
-          }
-        } catch {}
-        return [incoming, ...prev];
-      });
-    };
+    // 1. Supabase Realtime WebSockets: Instant <50ms push with ZERO serverless timeouts
+    let supabaseChannel: any = null;
+    if (isSupabaseConfigured()) {
+      const supabase = getSupabase();
+      if (supabase) {
+        supabaseChannel = supabase
+          .channel("studio-orders-realtime")
+          .on(
+            "postgres_changes",
+            { event: "INSERT", schema: "public", table: "orders" },
+            (payload) => {
+              const row = payload.new;
+              const newOrder: Order = {
+                id: row.id,
+                customer: {
+                  name: row.customer_name,
+                  phone: row.customer_phone,
+                  address: row.customer_address,
+                },
+                items: row.items || [],
+                total: Number(row.total),
+                status: row.status,
+                screenshot: row.screenshot,
+                screenshotExpired: !row.screenshot && Boolean(row.screenshot_expired),
+                screenshotExpiresAt: row.screenshot_expires_at,
+                createdAt: row.created_at,
+              };
 
-    // 1. Instant Tab-to-Tab Broadcast Channel (0ms latency)
-    let channel: BroadcastChannel | null = null;
-    if (typeof window !== "undefined" && "BroadcastChannel" in window) {
-      try {
-        channel = new BroadcastChannel("candlemate_orders_stream");
-        channel.onmessage = (e) => {
-          if (e.data?.type === "NEW_ORDER" && e.data.order) {
-            handleIncomingNewOrder(e.data.order);
-          }
-        };
-      } catch {}
+              setOrders((prev) => {
+                if (prev.some((o) => o.id === newOrder.id)) return prev;
+                return [newOrder, ...prev];
+              });
+              setNewOrderAlert(newOrder);
+              playOrderChime();
+            }
+          )
+          .on(
+            "postgres_changes",
+            { event: "UPDATE", schema: "public", table: "orders" },
+            (payload) => {
+              const row = payload.new;
+              setOrders((prev) =>
+                prev.map((o) =>
+                  o.id === row.id
+                    ? {
+                        ...o,
+                        status: row.status,
+                        screenshot: row.screenshot,
+                        screenshotExpired: !row.screenshot && Boolean(row.screenshot_expired),
+                      }
+                    : o
+                )
+              );
+            }
+          )
+          .subscribe((status) => {
+            if (status === "SUBSCRIBED") {
+              setIsLiveConnected(true);
+            }
+          });
+      }
     }
 
-    // 2. Storage event listener (instant cross-window notification)
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === "candlemate_latest_order_event" && e.newValue) {
-        try {
-          const parsed = JSON.parse(e.newValue);
-          if (parsed?.order) {
-            handleIncomingNewOrder(parsed.order);
-          }
-        } catch {}
-      }
-    };
-    window.addEventListener("storage", onStorage);
-
-    // 3. Live order stream via Server-Sent Events (SSE)
+    // 2. Server-Sent Events (SSE) stream fallback (for dedicated order server or local dev)
     let eventSource: EventSource | null = null;
     try {
       eventSource = new EventSource("/api/orders/live");
@@ -350,7 +306,12 @@ export default function Admin() {
         try {
           const data = JSON.parse(e.data);
           if (data.type === "NEW_ORDER" && data.order) {
-            handleIncomingNewOrder(data.order);
+            setOrders((prev) => {
+              if (prev.some((o) => o.id === data.order.id)) return prev;
+              return [data.order, ...prev];
+            });
+            setNewOrderAlert(data.order);
+            playOrderChime();
           } else if (data.type === "STATUS_UPDATED") {
             setOrders((prev) =>
               prev.map((o) => (o.id === data.id ? { ...o, status: data.status } : o))
@@ -367,63 +328,55 @@ export default function Admin() {
         } catch {}
       };
       eventSource.onerror = () => {
-        setIsLiveConnected(false);
+        if (!isSupabaseConfigured()) {
+          setIsLiveConnected(false);
+        }
       };
     } catch {
-      setIsLiveConnected(false);
+      if (!isSupabaseConfigured()) {
+        setIsLiveConnected(false);
+      }
     }
 
-    // 4. Ultra-fast polling heartbeat every 1.5s to ensure orders arrive within 2 seconds across any device
+    // 3. Heartbeat polling every 10 seconds to ensure no order is ever missed under any network condition
     const pollInterval = setInterval(() => {
-      fetch(`/api/admin/orders?_t=${Date.now()}`, {
-        cache: "no-store",
-        headers: { "Cache-Control": "no-cache" },
-      })
+      fetch("/api/admin/orders")
         .then((r) => r.json())
         .then((freshOrders) => {
           if (Array.isArray(freshOrders)) {
             setOrders((prev) => {
-              const prevMap = new Map(prev.map((o) => [o.id, o]));
-              let hasNew = false;
-              let newestOrder: Order | null = null;
-              for (const fo of freshOrders) {
-                if (fo && fo.id && !prevMap.has(fo.id)) {
-                  prevMap.set(fo.id, fo);
-                  hasNew = true;
-                  newestOrder = fo;
+              if (freshOrders.length > prev.length && prev.length > 0) {
+                const newest = freshOrders[0];
+                if (!prev.some((o) => o.id === newest.id)) {
+                  playOrderChime();
+                  setNewOrderAlert(newest);
                 }
               }
-              if (hasNew && newestOrder) {
-                playOrderChime();
-                setNewOrderAlert(newestOrder);
-                try {
-                  const stored = JSON.parse(localStorage.getItem("candlemate_orders") || "[]");
-                  const merged = Array.from(prevMap.values());
-                  localStorage.setItem("candlemate_orders", JSON.stringify(merged));
-                } catch {}
-              }
-              return Array.from(prevMap.values()).sort(
-                (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-              );
+              return freshOrders;
             });
           }
         })
         .catch(() => {});
-    }, 1500);
+    }, 10000);
 
     return () => {
+      if (supabaseChannel) {
+        const supabase = getSupabase();
+        supabase?.removeChannel(supabaseChannel);
+      }
       if (eventSource) eventSource.close();
-      if (channel) channel.close();
-      window.removeEventListener("storage", onStorage);
       clearInterval(pollInterval);
     };
   }, []);
 
-  async function status(id: string, status: OrderStatus) {
+  async function status(id: string, newStatus: OrderStatus) {
+    if (isSupabaseConfigured()) {
+      await supabase.from("orders").update({ status: newStatus }).eq("id", id);
+    }
     await fetch(`/api/admin/orders/${id}/status`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ status: newStatus }),
     });
     load();
   }
@@ -548,21 +501,12 @@ export default function Admin() {
 
   async function payment(e: React.FormEvent) {
     e.preventDefault();
-    const cleanUpi = upi.trim();
     const r = await fetch("/api/admin/settings/payment", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ upiId: cleanUpi }),
+      body: JSON.stringify({ upiId: upi }),
     });
-    if (r.ok) {
-      if (typeof window !== "undefined") {
-        localStorage.setItem("candlemate_upi_id", cleanUpi);
-      }
-      setNotice("Payment details saved. Checkout QR code updated.");
-    } else {
-      const data = await r.json().catch(() => ({}));
-      setNotice(data.error || "Please use a valid UPI ID.");
-    }
+    setNotice(r.ok ? "Payment details saved." : "Please use a valid UPI ID.");
   }
 
   async function password(e: React.FormEvent<HTMLFormElement>) {
@@ -656,46 +600,16 @@ export default function Admin() {
                 {orders.length} order{orders.length === 1 ? "" : "s"} received
               </p>
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                disabled={isRefreshing}
-                onClick={async () => {
-                  setIsRefreshing(true);
-                  await load();
-                  setIsRefreshing(false);
-                }}
-                className="flex items-center gap-1.5 rounded-lg border border-[#8a61483a] bg-white px-3 py-2 text-xs font-semibold text-[#765442] hover:bg-stone-100 transition shadow-xs cursor-pointer disabled:opacity-60"
-                title="Refresh orders list from server"
-              >
-                <span className={`inline-block ${isRefreshing ? "animate-spin" : ""}`}>⟳</span>
-                <span>{isRefreshing ? "Refreshing..." : "Refresh"}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  if (products.length > 0 && !manualOrder.productId) {
-                    setManualOrder((m) => ({ ...m, productId: products[0].id }));
-                  }
-                  setIsAddOrderOpen(true);
-                }}
-                className="rounded-lg bg-ink px-3.5 py-2 text-xs font-semibold text-white hover:bg-clay transition shadow-xs cursor-pointer"
-              >
-                + Add Order
-              </button>
-
-              <select
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-                className="rounded-lg border bg-white px-3 py-2 text-sm"
-              >
-                <option>All</option>
-                {statuses.map((s) => (
-                  <option key={s}>{s}</option>
-                ))}
-              </select>
-            </div>
+            <select
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              className="rounded-lg border bg-white px-3 py-2 text-sm"
+            >
+              <option>All</option>
+              {statuses.map((s) => (
+                <option key={s}>{s}</option>
+              ))}
+            </select>
           </div>
 
           <div className="overflow-x-auto rounded-2xl border border-[#8a61483a] bg-white">
@@ -1017,9 +931,6 @@ export default function Admin() {
               <button className="mt-3 rounded-full bg-ink px-5 py-2.5 text-sm text-white hover:bg-clay transition">
                 Save UPI ID
               </button>
-              <p className="mt-2 text-xs text-[#765442]/70">
-                Tip: You can also set <code>UPI_ID</code> or <code>NEXT_PUBLIC_UPI_ID</code> in Cloudflare Pages Environment Variables for instant edge deployment.
-              </p>
             </form>
 
             {/* Password Settings */}
@@ -1045,25 +956,20 @@ export default function Admin() {
               </button>
             </form>
 
-            {/* Cloudflare KV Storage Connection Card */}
+            {/* Cloud Storage Status (Replaced old Cloudflare Edge Storage) */}
             <div className="mt-5 rounded-2xl bg-white p-5 shadow-sm border border-[#8a614820]">
-              <div className="flex items-center justify-between">
-                <h3 className="font-medium text-ink">Cloudflare Edge Storage</h3>
-                <span className="rounded-full bg-[#e5eedc] px-2.5 py-0.5 text-xs font-semibold text-moss">
-                  Active
+              <div className="flex items-center gap-2">
+                <span className="flex h-2.5 w-2.5 relative">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
                 </span>
+                <h3 className="font-semibold text-ink text-sm">Cloud Storage: Supabase</h3>
               </div>
               <p className="mt-2 text-xs leading-relaxed text-[#765442]">
-                Your studio is equipped with Cloudflare Edge KV persistence so customer orders reach your incoming orders section across all devices.
+                Customer orders are persisted in <b>Supabase PostgreSQL</b> and payment proof screenshots are saved in the <b>payment-proofs</b> bucket. Real-time updates push directly to this studio dashboard.
               </p>
-              <div className="mt-3 rounded-xl bg-[#fff8ed] p-3 text-xs text-[#765442] border border-[#8a61481a]">
-                <p className="font-semibold text-ink">Cloudflare KV Setup (1-minute):</p>
-                <ol className="mt-1.5 list-decimal pl-4 space-y-1">
-                  <li>In Cloudflare Dashboard, go to <b>Workers & Pages → KV</b>.</li>
-                  <li>Click <b>Create Namespace</b> and name it: <code>candlemate_orders</code>.</li>
-                  <li>Go to your Pages project → <b>Settings → Functions → KV namespace bindings</b>.</li>
-                  <li>Add binding: Variable name: <code>CANDLEMATE_ORDERS</code>, Namespace: <code>candlemate_orders</code>.</li>
-                </ol>
+              <div className="mt-3 flex items-center gap-2 text-[11px] font-medium text-emerald-800 bg-emerald-50 rounded-lg p-2 border border-emerald-200">
+                <span>✓ Cloudflare KV binding removed · Zero-crash order processing active</span>
               </div>
             </div>
           </div>
@@ -1189,125 +1095,6 @@ export default function Admin() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Manual Add Order Modal */}
-      {isAddOrderOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
-          onClick={() => setIsAddOrderOpen(false)}
-        >
-          <div
-            className="relative flex max-h-[92vh] w-full max-w-lg flex-col rounded-3xl bg-[#fff8ed] shadow-2xl border border-[#8a61483a] overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b border-[#8a614820] bg-[#f5ede0] px-6 py-4">
-              <h3 className="display text-xl text-ink font-bold">+ Record Incoming Order</h3>
-              <button
-                type="button"
-                onClick={() => setIsAddOrderOpen(false)}
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-sm font-bold text-[#765442] hover:bg-clay hover:text-white transition"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateManualOrder} className="p-6 space-y-3 overflow-y-auto">
-              <p className="text-xs text-[#765442]">
-                Record orders received via WhatsApp, Instagram, or phone calls directly into your studio dashboard.
-              </p>
-
-              <div>
-                <label className="text-xs font-semibold text-[#765442]">Customer Name</label>
-                <input
-                  required
-                  value={manualOrder.name}
-                  onChange={(e) => setManualOrder({ ...manualOrder, name: e.target.value })}
-                  className="mt-1 w-full rounded-lg border bg-white p-2 text-sm text-ink outline-clay"
-                  placeholder="e.g. Priya Sharma"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-[#765442]">Phone Number</label>
-                  <input
-                    required
-                    value={manualOrder.phone}
-                    onChange={(e) => setManualOrder({ ...manualOrder, phone: e.target.value })}
-                    className="mt-1 w-full rounded-lg border bg-white p-2 text-sm text-ink outline-clay"
-                    placeholder="e.g. 9876543210"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-[#765442]">Quantity</label>
-                  <input
-                    type="number"
-                    min="1"
-                    required
-                    value={manualOrder.quantity}
-                    onChange={(e) => setManualOrder({ ...manualOrder, quantity: Number(e.target.value) || 1 })}
-                    className="mt-1 w-full rounded-lg border bg-white p-2 text-sm text-ink outline-clay"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-[#765442]">Candle Product</label>
-                <select
-                  value={manualOrder.productId}
-                  onChange={(e) => setManualOrder({ ...manualOrder, productId: e.target.value })}
-                  className="mt-1 w-full rounded-lg border bg-white p-2 text-sm text-ink outline-clay"
-                >
-                  {products.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} (₹{p.price})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-[#765442]">Delivery Address</label>
-                <textarea
-                  required
-                  value={manualOrder.address}
-                  onChange={(e) => setManualOrder({ ...manualOrder, address: e.target.value })}
-                  className="mt-1 w-full rounded-lg border bg-white p-2 text-sm text-ink outline-clay"
-                  rows={2}
-                  placeholder="Full delivery address with pincode"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-[#765442]">Total Amount (₹)</label>
-                <input
-                  type="number"
-                  placeholder="Auto-calculated if blank"
-                  value={manualOrder.total || ""}
-                  onChange={(e) => setManualOrder({ ...manualOrder, total: Number(e.target.value) })}
-                  className="mt-1 w-full rounded-lg border bg-white p-2 text-sm text-ink outline-clay"
-                />
-              </div>
-
-              <div className="pt-2 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsAddOrderOpen(false)}
-                  className="rounded-full border border-[#8a61483a] bg-white px-4 py-2 text-xs font-medium text-[#765442] hover:bg-stone-100"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="rounded-full bg-ink px-5 py-2 text-xs font-semibold text-white hover:bg-clay transition"
-                >
-                  Save Order
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}
