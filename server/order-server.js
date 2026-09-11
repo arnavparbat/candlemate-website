@@ -43,7 +43,7 @@ function loadStore() {
   }
 
   return {
-    settings: { upiId: "candlemate@upi", adminPasswordHash: "" },
+    settings: { upiId: process.env.UPI_ID || "candlemate@upi", adminPasswordHash: "" },
     products: [],
     orders: [],
   };

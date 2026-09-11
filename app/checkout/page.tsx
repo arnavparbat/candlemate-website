@@ -12,16 +12,40 @@ type Phase = "details" | "pay" | "burning" | "done";
 export default function Checkout() {
   const { items, total, clear } = useCart();
   const [phase, setPhase] = useState<Phase>("details");
-  const [upi, setUpi] = useState("candlemate@upi");
+  const [upi, setUpi] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("candlemate_upi_id");
+      if (saved) return saved;
+    }
+    return process.env.NEXT_PUBLIC_UPI_ID || "candlemate@upi";
+  });
   const [form, setForm] = useState({ name: "", address: "", phone: "" });
   const [error, setError] = useState("");
   const [shot, setShot] = useState("");
   const [order, setOrder] = useState<any>(null);
 
   useEffect(() => {
-    fetch("/api/settings/payment")
-      .then((r) => r.json())
-      .then((x) => setUpi(x.upiId));
+    // 1. Immediately read any studio-saved UPI from localStorage
+    const saved = localStorage.getItem("candlemate_upi_id");
+    if (saved) {
+      setUpi(saved);
+    }
+
+    // 2. Fetch fresh live payment settings bypassing all CDN & browser caching
+    fetch(`/api/settings/payment?_t=${Date.now()}`, {
+      cache: "no-store",
+      headers: { "Cache-Control": "no-cache" },
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((x) => {
+        if (x && x.upiId) {
+          setUpi(x.upiId);
+          localStorage.setItem("candlemate_upi_id", x.upiId);
+        }
+      })
+      .catch((err) => {
+        console.warn("Could not fetch payment settings:", err);
+      });
   }, []);
 
   const paymentUri = `upi://pay?pa=${upi}&pn=Candlemate&am=${total}&cu=INR`;

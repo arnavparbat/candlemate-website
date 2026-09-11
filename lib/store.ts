@@ -50,6 +50,16 @@ export function getStore(): Store {
     store = memoryStore;
   }
 
+  // Allow Cloudflare environment variables to set or override UPI ID across all edge nodes
+  const envUpi = process.env.NEXT_PUBLIC_UPI_ID || process.env.UPI_ID;
+  if (envUpi) {
+    if (!store.settings) {
+      store.settings = { upiId: envUpi, adminPasswordHash: "" };
+    } else if (!store.settings.upiId || store.settings.upiId === "candlemate@upi") {
+      store.settings.upiId = envUpi;
+    }
+  }
+
   // Automatically prune screenshots older than 3 days to protect cloud storage
   if (pruneExpiredScreenshots(store)) {
     saveStore(store);

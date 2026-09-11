@@ -192,11 +192,17 @@ export default function Admin() {
     const [o, p, s] = await Promise.all([
       fetch("/api/admin/orders").then((r) => r.json()),
       fetch("/api/products").then((r) => r.json()),
-      fetch("/api/settings/payment").then((r) => r.json()),
+      fetch(`/api/settings/payment?_t=${Date.now()}`, { cache: "no-store" })
+        .then((r) => r.json())
+        .catch(() => ({ upiId: "" })),
     ]);
     setOrders(o);
     setProducts(p);
-    setUpi(s.upiId);
+    const activeUpi =
+      (typeof window !== "undefined" && localStorage.getItem("candlemate_upi_id")) ||
+      s?.upiId ||
+      "";
+    if (activeUpi) setUpi(activeUpi);
   }
 
   useEffect(() => {
@@ -397,12 +403,21 @@ export default function Admin() {
 
   async function payment(e: React.FormEvent) {
     e.preventDefault();
+    const cleanUpi = upi.trim();
     const r = await fetch("/api/admin/settings/payment", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ upiId: upi }),
+      body: JSON.stringify({ upiId: cleanUpi }),
     });
-    setNotice(r.ok ? "Payment details saved." : "Please use a valid UPI ID.");
+    if (r.ok) {
+      if (typeof window !== "undefined") {
+        localStorage.setItem("candlemate_upi_id", cleanUpi);
+      }
+      setNotice("Payment details saved. Checkout QR code updated.");
+    } else {
+      const data = await r.json().catch(() => ({}));
+      setNotice(data.error || "Please use a valid UPI ID.");
+    }
   }
 
   async function password(e: React.FormEvent<HTMLFormElement>) {
@@ -827,6 +842,9 @@ export default function Admin() {
               <button className="mt-3 rounded-full bg-ink px-5 py-2.5 text-sm text-white hover:bg-clay transition">
                 Save UPI ID
               </button>
+              <p className="mt-2 text-xs text-[#765442]/70">
+                Tip: You can also set <code>UPI_ID</code> or <code>NEXT_PUBLIC_UPI_ID</code> in Cloudflare Pages Environment Variables for instant edge deployment.
+              </p>
             </form>
 
             {/* Password Settings */}
