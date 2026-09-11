@@ -13,195 +13,164 @@ export function Candle({
   compact?: boolean;
   showBadge?: boolean;
 }) {
-  const hasWax = stage !== "empty";
-  const hasWick = stage === "checkout" || stage === "burning" || stage === "done";
+  const hasWick = stage !== "empty";
   const isBurning = stage === "burning" || stage === "done";
 
   const stageLabels: Record<CandleStage, string> = {
     empty: "Jar prepared",
-    filled: "Soy wax poured",
-    checkout: "Spiral wick set",
-    burning: "Warm glowing flame",
-    done: "Handcrafted & ready",
+    filled: "Wick centered",
+    checkout: "Spiral wick ready",
+    burning: "Glowing warm flame",
+    done: "Handcrafted & lit",
   };
 
   return (
     <div
       className={`flex flex-col items-center select-none ${
-        compact ? "scale-[0.82] sm:scale-100 origin-bottom" : ""
+        compact ? "scale-[0.78] sm:scale-100 origin-center" : ""
       }`}
       aria-label={`Candle crafting: ${stageLabels[stage]}`}
     >
-      {/* Candle Assembly Viewport (overflow visible so wick & flame bloom naturally) */}
-      <div className="relative h-60 w-44 flex items-end justify-center pb-4 overflow-visible">
-        {/* Ambient Warm Halo when burning */}
+      {/* Candle Assembly Viewport */}
+      <div className="relative h-56 w-40 flex items-end justify-center pb-3 overflow-visible">
+        {/* Warm Ambient Backlight Glow when lit */}
         {isBurning && (
           <motion.div
             animate={{
-              opacity: [0.4, 0.7, 0.45, 0.75, 0.4],
-              scale: [0.96, 1.06, 0.98, 1.04, 0.96],
+              opacity: [0.45, 0.75, 0.5, 0.8, 0.45],
+              scale: [0.95, 1.06, 0.98, 1.05, 0.95],
             }}
-            transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
-            className="absolute top-2 left-1/2 -translate-x-1/2 h-48 w-48 rounded-full pointer-events-none -z-10"
+            transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
+            className="absolute top-1 left-1/2 -translate-x-1/2 h-44 w-44 rounded-full pointer-events-none -z-10"
             style={{
               background:
-                "radial-gradient(circle, rgba(248, 175, 60, 0.45) 0%, rgba(225, 110, 30, 0.18) 45%, transparent 72%)",
+                "radial-gradient(circle, rgba(250, 175, 55, 0.5) 0%, rgba(225, 105, 25, 0.2) 45%, transparent 72%)",
             }}
           />
         )}
 
-        {/* Real Wood Coaster Base & Cast Shadow */}
-        <div className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-36 h-4 rounded-[50%] bg-[#2b140a]/30 blur-[5px] -z-10" />
+        {/* Floating micro-embers rising from flame */}
+        {isBurning && (
+          <>
+            <motion.div
+              animate={{
+                y: [-5, -35, -55],
+                x: [0, 4, -3],
+                opacity: [0, 0.9, 0],
+                scale: [0.8, 1, 0.4],
+              }}
+              transition={{ duration: 1.8, repeat: Infinity, ease: "easeOut", delay: 0.2 }}
+              className="absolute h-1 w-1 rounded-full bg-[#ffb703] shadow-[0_0_6px_#ff9e00] pointer-events-none z-40"
+              style={{ bottom: "135px", left: "calc(50% + 5px)" }}
+            />
+            <motion.div
+              animate={{
+                y: [-2, -28, -48],
+                x: [0, -5, 3],
+                opacity: [0, 0.8, 0],
+                scale: [0.7, 0.9, 0.3],
+              }}
+              transition={{ duration: 2.1, repeat: Infinity, ease: "easeOut", delay: 1.1 }}
+              className="absolute h-1 w-1 rounded-full bg-[#ff8500] shadow-[0_0_5px_#ff5400] pointer-events-none z-40"
+              style={{ bottom: "132px", left: "calc(50% - 2px)" }}
+            />
+          </>
+        )}
+
+        {/* Real Wood Coaster Base & Shadow */}
+        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-36 h-4 rounded-[50%] bg-[#2b140a]/25 blur-[5px] -z-10" />
         <div
-          className="absolute bottom-1.5 left-1/2 -translate-x-1/2 w-32 h-3.5 rounded-[50%] border-t border-[#d8a475]/50 shadow-md -z-10"
+          className="absolute bottom-1 left-1/2 -translate-x-1/2 w-32 h-3.5 rounded-[50%] border-t border-[#d8a475]/50 shadow-md -z-10"
           style={{
-            background:
-              "linear-gradient(180deg, #ad7147 0%, #7d4826 60%, #4a2411 100%)",
+            background: "linear-gradient(180deg, #ad7147 0%, #7d4826 60%, #4a2411 100%)",
           }}
         />
 
-        {/* Outer Candle Jar Wrapper */}
+        {/* Amber Glass Jar Vessel */}
         <div className="relative w-28 h-36 flex items-end justify-center">
-          {/* Amber Glass Body */}
+          {/* Glass Cylinder with Amber Tint & Specular Glare */}
           <div
-            className="absolute inset-0 rounded-b-[22px] rounded-t-[5px] shadow-xl border-t-2 border-white/35 overflow-hidden"
+            className="absolute inset-0 rounded-b-[22px] rounded-t-[6px] shadow-xl border-t-2 border-white/35 overflow-hidden"
             style={{
               background:
-                "linear-gradient(90deg, rgba(65,27,12,0.94) 0%, rgba(142,63,25,0.7) 16%, rgba(210,110,48,0.32) 48%, rgba(245,166,98,0.38) 58%, rgba(148,68,28,0.74) 84%, rgba(58,22,10,0.96) 100%)",
+                "linear-gradient(90deg, rgba(65,27,12,0.92) 0%, rgba(142,63,25,0.65) 16%, rgba(210,110,48,0.25) 48%, rgba(245,166,98,0.32) 58%, rgba(148,68,28,0.68) 84%, rgba(58,22,10,0.95) 100%)",
               boxShadow:
-                "inset 0 1px 2px rgba(255,255,255,0.45), inset 0 -4px 10px rgba(45,18,8,0.7), 0 10px 20px -5px rgba(50,20,10,0.35)",
+                "inset 0 1px 2px rgba(255,255,255,0.4), inset 0 -4px 10px rgba(45,18,8,0.6), 0 10px 20px -5px rgba(50,20,10,0.3)",
             }}
           >
-            {/* Glass Rim Top Lip Highlight */}
+            {/* Top Lip Glass Highlight */}
             <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-transparent via-white/40 to-transparent z-30" />
 
-            {/* Left Vertical Specular Glare */}
-            <div className="absolute inset-y-0 left-2.5 w-2 bg-gradient-to-r from-transparent via-white/25 to-transparent z-30 pointer-events-none" />
-
-            {/* Creamy Soy Wax Body (inside the jar) */}
-            {hasWax && (
-              <motion.div
-                initial={{ height: 0 }}
-                animate={
-                  isBurning
-                    ? { height: 96, y: [0, 2, 4] }
-                    : { height: 104, y: 0 }
-                }
-                transition={{ duration: 1.1, ease: "easeOut" }}
-                className="absolute bottom-2 inset-x-2 rounded-b-[16px] z-10"
-                style={{
-                  background: isBurning
-                    ? "linear-gradient(180deg, #f5c87e 0%, #edd8b8 16%, #e2c79f 80%, #caa471 100%)"
-                    : "linear-gradient(180deg, #fbf4ea 0%, #f1dfc5 20%, #e5cb9f 80%, #caa573 100%)",
-                  boxShadow:
-                    "inset 0 2px 4px rgba(255,255,255,0.6), inset 0 -3px 6px rgba(90,45,20,0.25)",
-                }}
-              >
-                {/* Molten Glow pool when burning */}
-                {isBurning && (
-                  <motion.div
-                    animate={{ opacity: [0.65, 0.95, 0.7, 1, 0.65] }}
-                    transition={{
-                      duration: 1.6,
-                      repeat: Infinity,
-                      ease: "easeInOut",
-                    }}
-                    className="absolute top-0 inset-x-0 h-3 rounded-[50%] bg-[#ffbe4d]/70 blur-[1px]"
-                  />
-                )}
-              </motion.div>
-            )}
+            {/* Vertical Specular Glass Reflection */}
+            <div className="absolute inset-y-0 left-2.5 w-2 bg-gradient-to-r from-transparent via-white/20 to-transparent z-30 pointer-events-none" />
 
             {/* Glass Base Thickness */}
             <div
-              className="absolute bottom-0 inset-x-0 h-2.5 rounded-b-[22px] z-20 pointer-events-none"
+              className="absolute bottom-0 inset-x-0 h-3 rounded-b-[22px] z-20 pointer-events-none"
               style={{
                 background:
-                  "linear-gradient(180deg, rgba(80,35,16,0.25) 0%, rgba(50,20,8,0.85) 100%)",
+                  "linear-gradient(180deg, rgba(80,35,16,0.2) 0%, rgba(50,20,8,0.85) 100%)",
                 borderTop: "1px solid rgba(255,255,255,0.15)",
               }}
             />
           </div>
 
-          {/* Top Surface Oval Meniscus (Renders above the wax line) */}
-          {hasWax && (
-            <div
-              className="absolute inset-x-2.5 z-20 pointer-events-none"
-              style={{
-                bottom: isBurning ? "100px" : "108px",
-                height: "8px",
-                borderRadius: "50%",
-                background: isBurning
-                  ? "radial-gradient(ellipse at center, #ffe099 0%, #e7a64c 65%, #bb7425 100%)"
-                  : "radial-gradient(ellipse at center, #ffffff 0%, #f6ecdc 60%, #e2ccaa 100%)",
-                border: "1px solid rgba(255,255,255,0.4)",
-              }}
-            />
-          )}
-
-          {/* Handcrafted Spiral Cotton Wick (Sits directly on TOP of the wax) */}
+          {/* Centered Spiral Braided Cotton Wick (Clean vector wick with metal sustainer tab) */}
           {hasWick && (
             <motion.div
-              initial={{ y: -20, opacity: 0 }}
+              initial={{ y: -25, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               transition={{ duration: 0.5, ease: "easeOut" }}
               className="absolute z-25 pointer-events-none"
               style={{
-                bottom: isBurning ? "102px" : "110px",
+                bottom: "10px",
                 left: "50%",
                 transform: "translateX(-50%)",
               }}
             >
               <svg
-                width="20"
-                height="28"
-                viewBox="0 0 20 28"
+                width="36"
+                height="96"
+                viewBox="0 0 36 96"
                 fill="none"
                 className="overflow-visible"
               >
-                {/* Wick shadow on wax surface */}
-                <ellipse
-                  cx="10"
-                  cy="26"
-                  rx="3"
-                  ry="1.2"
-                  fill="rgba(40,15,5,0.35)"
-                />
+                {/* Silver Metal Sustainer Tab at jar bottom */}
+                <ellipse cx="18" cy="91" rx="11" ry="3" fill="#b0a597" opacity="0.8" />
+                <ellipse cx="18" cy="89.5" rx="5" ry="1.5" fill="#4a3e35" />
 
-                {/* Braided cotton wick with organic spiral curve */}
+                {/* Handcrafted Cotton Wick rising with organic spiral curl */}
                 <path
-                  d="M 10 26 C 9.5 20 9 15 10 12 C 11 8 14.5 7 15.5 4.5 C 16.2 2 14 1 12 1.5 C 10 2 9.5 4 11 5.5 C 12.2 6.5 13.8 5.8 13.2 4.2"
-                  stroke="#23130a"
-                  strokeWidth="2.6"
+                  d="M 18 89 C 17.5 68 17 48 18 34 C 19 23 25 18 26.5 12 C 27.5 7 24 3 20 4 C 16.5 5 16 9.5 19.5 11.5 C 22.5 13 25 11.5 24 8.5"
+                  stroke="#211107"
+                  strokeWidth="2.8"
                   strokeLinecap="round"
                 />
 
-                {/* Light cotton thread texture */}
+                {/* Braided cotton cord texture line */}
                 <path
-                  d="M 10 26 C 9.5 20 9 15 10 12 C 11 8 14.5 7 15.5 4.5 C 16.2 2 14 1 12 1.5"
-                  stroke="#d7b38d"
+                  d="M 18 89 C 17.5 68 17 48 18 34 C 19 23 25 18 26.5 12 C 27.5 7 24 3 20 4"
+                  stroke="#e2c19b"
                   strokeWidth="0.8"
-                  strokeDasharray="1.5,1.5"
-                  opacity="0.65"
+                  strokeDasharray="2,2"
+                  opacity="0.6"
                 />
 
                 {/* Charred spiral ember tip */}
                 <circle
-                  cx="13.2"
-                  cy="4.2"
-                  r="1.6"
-                  fill={isBurning ? "#ff3700" : "#110603"}
+                  cx="24"
+                  cy="8.5"
+                  r="2"
+                  fill={isBurning ? "#ff3700" : "#120603"}
                   style={{
-                    filter: isBurning
-                      ? "drop-shadow(0 0 4px #ff6600)"
-                      : "none",
+                    filter: isBurning ? "drop-shadow(0 0 5px #ff5500)" : "none",
                   }}
                 />
               </svg>
             </motion.div>
           )}
 
-          {/* Living Teardrop Flame (Floats right on top of the spiral ember tip) */}
+          {/* Living Teardrop Flame sitting right on the spiral ember tip */}
           {isBurning && (
             <motion.div
               initial={{ scale: 0, opacity: 0 }}
@@ -209,74 +178,97 @@ export function Candle({
               transition={{ duration: 0.35, ease: "easeOut" }}
               className="absolute z-35 flex flex-col items-center pointer-events-none"
               style={{
-                bottom: "126px",
-                left: "calc(50% + 3.2px)", // perfectly aligns with the spiral tip
+                bottom: "94px",
+                left: "calc(50% + 6px)", // aligns precisely with the spiral tip
                 transform: "translateX(-50%)",
               }}
             >
               {/* Flickering Flame Body */}
               <motion.div
                 animate={{
-                  scaleY: [1, 1.07, 0.95, 1.05, 0.98, 1],
-                  scaleX: [1, 0.95, 1.04, 0.96, 1.02, 1],
-                  rotate: [-1.5, 1.5, -1, 1.8, -0.8, -1.5],
-                  x: [-0.3, 0.4, -0.4, 0.2, -0.3],
+                  scaleY: [1, 1.08, 0.94, 1.06, 0.97, 1],
+                  scaleX: [1, 0.94, 1.05, 0.96, 1.02, 1],
+                  rotate: [-1.8, 1.8, -1.2, 2, -0.8, -1.8],
+                  x: [-0.4, 0.5, -0.5, 0.3, -0.4],
                 }}
                 transition={{
-                  duration: 0.7,
+                  duration: 0.8,
                   repeat: Infinity,
                   repeatType: "mirror",
                   ease: "easeInOut",
                 }}
-                className="relative w-5 h-9 flex items-end justify-center"
+                className="relative flex items-end justify-center"
               >
-                {/* Outer Amber Flame Glow */}
-                <div
-                  className="absolute inset-0 rounded-[50%_50%_35%_35%/60%_60%_40%_40%]"
-                  style={{
-                    background:
-                      "radial-gradient(ellipse at 50% 85%, #ff5500 0%, #ff8c00 50%, #ffa500 80%, transparent 100%)",
-                    filter: "blur(1px)",
-                    boxShadow:
-                      "0 0 14px 2px rgba(255, 140, 0, 0.6), 0 -3px 10px rgba(255, 80, 0, 0.35)",
-                  }}
-                />
+                <svg
+                  width="30"
+                  height="50"
+                  viewBox="0 0 30 50"
+                  fill="none"
+                  className="overflow-visible"
+                >
+                  <defs>
+                    {/* Flame outer glow blur */}
+                    <filter id="flameBlur" x="-40%" y="-40%" width="180%" height="180%">
+                      <feGaussianBlur stdDeviation="2.5" result="blur" />
+                      <feMerge>
+                        <feMergeNode in="blur" />
+                        <feMergeNode in="SourceGraphic" />
+                      </feMerge>
+                    </filter>
 
-                {/* Middle Golden Core */}
-                <div
-                  className="absolute inset-x-0.5 bottom-0.5 top-1.5 rounded-[50%_50%_35%_35%/60%_60%_40%_40%]"
-                  style={{
-                    background:
-                      "linear-gradient(180deg, #fff2a3 0%, #ffbe38 55%, #ff7700 100%)",
-                  }}
-                />
+                    {/* Outer radiant gradient */}
+                    <radialGradient id="outerHalo" cx="50%" cy="80%" r="65%">
+                      <stop offset="0%" stopColor="#ff4500" stopOpacity="0.95" />
+                      <stop offset="60%" stopColor="#ff8c00" stopOpacity="0.75" />
+                      <stop offset="100%" stopColor="#ffa500" stopOpacity="0" />
+                    </radialGradient>
 
-                {/* Incandescent White-Hot Center */}
-                <div
-                  className="absolute bottom-1 w-1.5 h-3.5 rounded-full"
-                  style={{
-                    background:
-                      "linear-gradient(180deg, #ffffff 0%, #fff7cc 70%, transparent 100%)",
-                    filter: "blur(0.4px)",
-                  }}
-                />
+                    {/* Main flame gradient */}
+                    <linearGradient id="mainFlame" x1="50%" y1="100%" x2="50%" y2="0%">
+                      <stop offset="0%" stopColor="#ff5500" />
+                      <stop offset="35%" stopColor="#ffaa00" />
+                      <stop offset="75%" stopColor="#ffea75" />
+                      <stop offset="100%" stopColor="#ffffff" />
+                    </linearGradient>
 
-                {/* Ethereal Blue Base at wick */}
-                <div
-                  className="absolute bottom-0 w-2.5 h-1.5 rounded-full"
-                  style={{
-                    background:
-                      "radial-gradient(ellipse at center, #3a68ff 0%, #2040b0 60%, transparent 100%)",
-                    opacity: 0.85,
-                  }}
-                />
+                    {/* White-hot center core */}
+                    <linearGradient id="whiteCore" x1="50%" y1="100%" x2="50%" y2="0%">
+                      <stop offset="0%" stopColor="#ffffff" stopOpacity="0.4" />
+                      <stop offset="40%" stopColor="#ffffff" stopOpacity="0.95" />
+                      <stop offset="100%" stopColor="#ffffff" />
+                    </linearGradient>
+                  </defs>
+
+                  {/* Outer Amber Halo Teardrop */}
+                  <path
+                    d="M 15 2 C 22 15 28 26 28 36 C 28 44 22 49 15 49 C 8 49 2 44 2 36 C 2 26 8 15 15 2 Z"
+                    fill="url(#outerHalo)"
+                    filter="url(#flameBlur)"
+                  />
+
+                  {/* Body Teardrop Flame */}
+                  <path
+                    d="M 15 5 C 21 16 25 26 25 36 C 25 42 20.5 46.5 15 46.5 C 9.5 46.5 5 42 5 36 C 5 26 9 16 15 5 Z"
+                    fill="url(#mainFlame)"
+                  />
+
+                  {/* Incandescent White Core */}
+                  <path
+                    d="M 15 16 C 18 24 20 30 20 36 C 20 40 17.5 43 15 43 C 12.5 43 10 40 10 36 C 10 30 12 24 15 16 Z"
+                    fill="url(#whiteCore)"
+                  />
+
+                  {/* Blue Corona Base right at wick */}
+                  <ellipse cx="15" cy="46" rx="4.5" ry="2" fill="#3a68ff" opacity="0.85" />
+                  <ellipse cx="15" cy="45.5" rx="2.5" ry="1.2" fill="#90b8ff" opacity="0.9" />
+                </svg>
               </motion.div>
             </motion.div>
           )}
         </div>
       </div>
 
-      {/* Progress Badge (Optional) */}
+      {/* Progress Badge */}
       {showBadge && (
         <motion.div
           key={stage}
