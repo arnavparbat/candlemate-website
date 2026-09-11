@@ -1,5 +1,6 @@
 import { Header } from "@/components/header";
 import { ProductCard } from "@/components/product-card";
+import { Candle } from "@/components/candle";
 import { getStore } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +14,7 @@ export default function Home() {
       <main>
         {/* Compact Hero Section: Takes only ~1/3 of the tab on mobile */}
         <section className="grain overflow-hidden border-b border-[#5c39271a]">
-          <div className="mx-auto grid max-w-6xl items-center gap-4 px-4 py-4 sm:gap-12 sm:px-5 sm:py-16 grid-cols-[1.15fr_.85fr] md:grid-cols-[1.1fr_.9fr]">
+          <div className="mx-auto grid max-w-6xl items-center gap-3 px-4 py-3 sm:gap-12 sm:px-5 sm:py-14 grid-cols-[1.2fr_.8fr] md:grid-cols-[1.1fr_.9fr]">
             <div>
               <p className="mb-1 sm:mb-4 text-[10px] sm:text-xs font-bold uppercase tracking-[.2em] text-clay">
                 Hand-poured in small batches
@@ -32,15 +33,13 @@ export default function Home() {
               </a>
             </div>
 
-            <div className="relative mx-auto w-full max-w-[150px] sm:max-w-[400px]">
-              {/* Warm atmospheric glow behind the candle */}
-              <div className="absolute -inset-2 sm:-inset-4 rounded-[22px] sm:rounded-[42px] bg-[#e7c498]/50 blur-lg sm:blur-2xl -z-10" />
-              <div className="group relative overflow-hidden rounded-[18px] sm:rounded-[36px] border border-[#5c39271f] bg-[#fff8ed] p-1 sm:p-2 shadow-lg sm:shadow-2xl shadow-[#b56b43]/20">
-                <img
-                  src="/hero-candle.jpg"
-                  alt="Lit handmade soy candle with glowing flame"
-                  className="h-28 sm:h-[420px] w-full rounded-[14px] sm:rounded-[28px] object-cover transition duration-700 ease-out group-hover:scale-105"
-                />
+            {/* Handcrafted Animated Candle Jar in Hero (Sleek and non-intrusive for mobile) */}
+            <div className="relative mx-auto flex items-center justify-center w-full max-w-[150px] sm:max-w-[280px]">
+              {/* Soft warm glow bloom behind jar */}
+              <div className="absolute -inset-2 sm:-inset-6 rounded-full bg-[#f8af3c]/25 blur-lg sm:blur-2xl -z-10 pointer-events-none" />
+              
+              <div className="py-0.5 sm:py-2">
+                <Candle stage="burning" compact={true} showBadge={false} />
               </div>
             </div>
           </div>
