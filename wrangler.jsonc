@@ -23,5 +23,11 @@
 		// Enable image optimization
 		// see https://opennext.js.org/cloudflare/howtos/image
 		"binding": "IMAGES"
+	},
+	"vars": {
+		"NEXT_PUBLIC_SUPABASE_URL": "https://your-project-id.supabase.co",
+		"NEXT_PUBLIC_SUPABASE_ANON_KEY": "your-supabase-anon-key",
+		"UPI_ID": "9552682389@ybl",
+		"NEXT_PUBLIC_UPI_ID": "9552682389@ybl"
 	}
 }
