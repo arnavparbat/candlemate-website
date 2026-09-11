@@ -48,7 +48,8 @@ export default function Checkout() {
       });
   }, []);
 
-  const paymentUri = `upi://pay?pa=${upi}&pn=Candlemate&am=${total}&cu=INR`;
+  const paymentNote = encodeURIComponent("Attach screenshot on website to finalize order");
+  const paymentUri = `upi://pay?pa=${upi}&pn=Candlemate&am=${total}&cu=INR&tn=${paymentNote}`;
 
   const candleStage: CandleStage =
     phase === "details"
@@ -59,6 +60,16 @@ export default function Checkout() {
       ? "burning"
       : "done";
 
+  function triggerUpiRedirect(uri?: string) {
+    if (typeof window === "undefined") return;
+    const target = uri || paymentUri;
+    try {
+      window.location.href = target;
+    } catch (err) {
+      console.warn("Could not trigger UPI intent:", err);
+    }
+  }
+
   function details(e: FormEvent) {
     e.preventDefault();
     if (!items.length) return setError("Your bag is empty.");
@@ -67,6 +78,13 @@ export default function Checkout() {
     }
     setError("");
     setPhase("pay");
+
+    // Automatically prompt/open preferred UPI app (GPay, PhonePe, Paytm, etc.) on mobile devices
+    if (typeof window !== "undefined" && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+      setTimeout(() => {
+        triggerUpiRedirect(`upi://pay?pa=${upi}&pn=Candlemate&am=${total}&cu=INR&tn=${paymentNote}`);
+      }, 350);
+    }
   }
 
   function fileToOptimizedScreenshot(file: File, maxDim = 1200, quality = 0.82): Promise<string> {
@@ -314,8 +332,31 @@ export default function Checkout() {
 
               {/* Step 2: Payment Section */}
               {phase === "pay" && (
-                <div className="paper mt-5 rounded-3xl p-6 sm:p-8 shadow-sm bg-white/95">
-                  <div className="flex flex-wrap items-center gap-6">
+                <div className="paper mt-5 rounded-3xl p-6 sm:p-8 shadow-sm bg-white/95 space-y-5">
+                  {/* Direct Pay with UPI App (Automatic on mobile + Direct Tap Button) */}
+                  <div className="rounded-2xl border border-emerald-200 bg-[#f4fbf7] p-4">
+                    <div className="flex items-center gap-2.5">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 text-base">⚡</span>
+                      <div>
+                        <p className="text-sm font-semibold text-emerald-950">
+                          Pay Directly via UPI App
+                        </p>
+                        <p className="text-xs text-emerald-800">
+                          GPay, PhonePe, Paytm, BHIM, Cred
+                        </p>
+                      </div>
+                    </div>
+                    <a
+                      href={paymentUri}
+                      onClick={() => triggerUpiRedirect()}
+                      className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-emerald-700 py-3 text-center text-sm font-semibold text-white shadow-sm hover:bg-emerald-800 transition"
+                    >
+                      <span>Open UPI App to Pay ₹{total} →</span>
+                    </a>
+                  </div>
+
+                  {/* QR Code and Details (Always preserved) */}
+                  <div className="flex flex-wrap items-center gap-6 pt-1">
                     <div className="rounded-2xl bg-white p-3 border border-[#8a614820] shadow-sm">
                       <QRCodeSVG value={paymentUri} size={150} />
                     </div>
@@ -334,11 +375,21 @@ export default function Checkout() {
                       </button>
                     </div>
                   </div>
-                  <ol className="mt-6 list-decimal space-y-2 pl-5 text-sm leading-6 text-[#765442]">
-                    <li>Scan this code with any UPI app (GPay, PhonePe, Paytm) and complete your payment.</li>
-                    <li>Upload a screenshot below so our studio can match it quickly.</li>
-                  </ol>
-                  <label className="mt-6 block cursor-pointer rounded-xl border border-dashed border-[#a66a46] p-4 text-center text-sm text-clay hover:bg-[#fff8ed] transition">
+
+                  {/* Step instructions with payment note reminder */}
+                  <div className="rounded-2xl bg-[#fff8ed] p-4 text-xs leading-relaxed text-[#765442] border border-[#8a614828]">
+                    <p className="font-semibold text-ink flex items-center gap-1.5 mb-1.5 text-sm">
+                      <span>📸</span> Important payment steps:
+                    </p>
+                    <ol className="list-decimal space-y-1.5 pl-4">
+                      <li>Pay ₹{total} via UPI app or scan the QR code above.</li>
+                      <li>In your UPI app, you will see the pre-filled note: <b className="text-ink">"Attach screenshot on website to finalize order"</b>.</li>
+                      <li>Take a screenshot of the successful payment screen and upload it below so our studio can verify and dispatch your order.</li>
+                    </ol>
+                  </div>
+
+                  {/* Screenshot upload */}
+                  <label className="block cursor-pointer rounded-xl border border-dashed border-[#a66a46] p-4 text-center text-sm text-clay hover:bg-[#fff8ed] transition">
                     {shot ? "Screenshot added ✓ — tap to change" : "Upload payment screenshot"}
                     <input
                       type="file"
@@ -348,13 +399,13 @@ export default function Checkout() {
                     />
                   </label>
                   {error && (
-                    <div className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-700 border border-red-200">
+                    <div className="rounded-xl bg-red-50 p-3 text-sm text-red-700 border border-red-200">
                       {error}
                     </div>
                   )}
                   <button
                     onClick={submit}
-                    className="mt-5 w-full rounded-full bg-ink py-3.5 text-sm font-medium text-white hover:bg-clay transition shadow-sm"
+                    className="w-full rounded-full bg-ink py-3.5 text-sm font-medium text-white hover:bg-clay transition shadow-sm"
                   >
                     I’ve paid — place my order
                   </button>
