@@ -13,15 +13,16 @@ export function Candle({
   compact?: boolean;
   showBadge?: boolean;
 }) {
-  const hasWick = stage !== "empty";
+  const hasWax = stage !== "empty";
+  const hasWick = stage === "checkout" || stage === "burning" || stage === "done";
   const isBurning = stage === "burning" || stage === "done";
 
   const stageLabels: Record<CandleStage, string> = {
     empty: "Jar prepared",
-    filled: "Wick centered",
-    checkout: "Spiral wick ready",
+    filled: "Soy wax poured",
+    checkout: "Spiral wick set",
     burning: "Glowing warm flame",
-    done: "Handcrafted & lit",
+    done: "Handcrafted & ready",
   };
 
   return (
@@ -31,9 +32,9 @@ export function Candle({
       }`}
       aria-label={`Candle crafting: ${stageLabels[stage]}`}
     >
-      {/* Candle Assembly Viewport */}
+      {/* Candle Assembly Container */}
       <div className="relative h-56 w-40 flex items-end justify-center pb-3 overflow-visible">
-        {/* Warm Ambient Backlight Glow when lit */}
+        {/* Warm Ambient Halo when burning */}
         {isBurning && (
           <motion.div
             animate={{
@@ -98,6 +99,34 @@ export function Candle({
                 "inset 0 1px 2px rgba(255,255,255,0.4), inset 0 -4px 10px rgba(45,18,8,0.6), 0 10px 20px -5px rgba(50,20,10,0.3)",
             }}
           >
+            {/* Natural Soy Wax Fill inside the Jar */}
+            {hasWax && (
+              <motion.div
+                initial={{ height: 0 }}
+                animate={{ height: isBurning ? 90 : 96 }}
+                transition={{ duration: 1.1, ease: "easeOut" }}
+                className="absolute bottom-1 inset-x-1.5 rounded-b-[18px] overflow-hidden z-10"
+                style={{
+                  background: isBurning
+                    ? "linear-gradient(180deg, #f7d69b 0%, #eec88c 12%, #deb675 75%, #ba8a45 100%)"
+                    : "linear-gradient(180deg, #faf5ec 0%, #f3e5d0 15%, #e8d3b2 75%, #cca56c 100%)",
+                  boxShadow:
+                    "inset 0 1px 3px rgba(255,255,255,0.5), inset 0 -3px 8px rgba(70,30,10,0.3)",
+                }}
+              >
+                {/* Clean smooth wax top surface — NO awkward borders or blobs */}
+                <div
+                  className="absolute top-0 inset-x-0 h-2.5 rounded-[50%]"
+                  style={{
+                    background: isBurning
+                      ? "radial-gradient(ellipse at 50% 50%, #ffe8b5 0%, #f3c275 60%, #da9b42 100%)"
+                      : "radial-gradient(ellipse at 50% 50%, #ffffff 0%, #fbf3e6 55%, #e9d5b7 100%)",
+                    opacity: 0.9,
+                  }}
+                />
+              </motion.div>
+            )}
+
             {/* Top Lip Glass Highlight */}
             <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-transparent via-white/40 to-transparent z-30" />
 
@@ -115,53 +144,49 @@ export function Candle({
             />
           </div>
 
-          {/* Centered Spiral Braided Cotton Wick (Clean vector wick with metal sustainer tab) */}
+          {/* Spiral Braided Cotton Wick (Cleanly emerging from the wax — NO awkward blobs) */}
           {hasWick && (
             <motion.div
-              initial={{ y: -25, opacity: 0 }}
+              initial={{ y: -20, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               transition={{ duration: 0.5, ease: "easeOut" }}
               className="absolute z-25 pointer-events-none"
               style={{
-                bottom: "10px",
+                bottom: isBurning ? "91px" : "97px",
                 left: "50%",
                 transform: "translateX(-50%)",
               }}
             >
               <svg
-                width="36"
-                height="96"
-                viewBox="0 0 36 96"
+                width="24"
+                height="30"
+                viewBox="0 0 24 30"
                 fill="none"
                 className="overflow-visible"
               >
-                {/* Silver Metal Sustainer Tab at jar bottom */}
-                <ellipse cx="18" cy="91" rx="11" ry="3" fill="#b0a597" opacity="0.8" />
-                <ellipse cx="18" cy="89.5" rx="5" ry="1.5" fill="#4a3e35" />
-
-                {/* Handcrafted Cotton Wick rising with organic spiral curl */}
+                {/* Braided cotton wick with organic spiral curve */}
                 <path
-                  d="M 18 89 C 17.5 68 17 48 18 34 C 19 23 25 18 26.5 12 C 27.5 7 24 3 20 4 C 16.5 5 16 9.5 19.5 11.5 C 22.5 13 25 11.5 24 8.5"
-                  stroke="#211107"
+                  d="M 12 30 C 11.5 22 11 16 12 12 C 13 8 16.5 7 17.5 4.5 C 18 2 15.5 1 13 1.5 C 11 2 10.5 4.5 12 6 C 13.5 7 15 6 14.5 4.5"
+                  stroke="#23130a"
                   strokeWidth="2.8"
                   strokeLinecap="round"
                 />
 
                 {/* Braided cotton cord texture line */}
                 <path
-                  d="M 18 89 C 17.5 68 17 48 18 34 C 19 23 25 18 26.5 12 C 27.5 7 24 3 20 4"
-                  stroke="#e2c19b"
+                  d="M 12 30 C 11.5 22 11 16 12 12 C 13 8 16.5 7 17.5 4.5 C 18 2 15.5 1 13 1.5"
+                  stroke="#deb992"
                   strokeWidth="0.8"
-                  strokeDasharray="2,2"
-                  opacity="0.6"
+                  strokeDasharray="1.5,1.5"
+                  opacity="0.65"
                 />
 
                 {/* Charred spiral ember tip */}
                 <circle
-                  cx="24"
-                  cy="8.5"
-                  r="2"
-                  fill={isBurning ? "#ff3700" : "#120603"}
+                  cx="14.5"
+                  cy="4.5"
+                  r="1.8"
+                  fill={isBurning ? "#ff3700" : "#110603"}
                   style={{
                     filter: isBurning ? "drop-shadow(0 0 5px #ff5500)" : "none",
                   }}
@@ -170,7 +195,7 @@ export function Candle({
             </motion.div>
           )}
 
-          {/* Living Teardrop Flame sitting right on the spiral ember tip */}
+          {/* Living Teardrop Flame (sitting right on the spiral ember tip) */}
           {isBurning && (
             <motion.div
               initial={{ scale: 0, opacity: 0 }}
@@ -178,8 +203,8 @@ export function Candle({
               transition={{ duration: 0.35, ease: "easeOut" }}
               className="absolute z-35 flex flex-col items-center pointer-events-none"
               style={{
-                bottom: "94px",
-                left: "calc(50% + 6px)", // aligns precisely with the spiral tip
+                bottom: "116px",
+                left: "calc(50% + 2.5px)", // aligns precisely with the spiral tip
                 transform: "translateX(-50%)",
               }}
             >
