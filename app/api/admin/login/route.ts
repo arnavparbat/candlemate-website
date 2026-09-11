@@ -1,0 +1,2 @@
+import { getStore } from "@/lib/store"; import bcrypt from "bcryptjs"; import { NextResponse } from "next/server";
+export async function POST(req:Request){const {password}=await req.json();if(!bcrypt.compareSync(password||"",getStore().settings.adminPasswordHash))return NextResponse.json({error:"Incorrect password"},{status:401});const res=NextResponse.json({ok:true});res.cookies.set("candlemate_admin","yes",{httpOnly:true,sameSite:"strict",path:"/",maxAge:60*60*12});return res}
