@@ -33,13 +33,19 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const add = (p: Product) => {
     // Physical haptic vibration on mobile devices (Android / supported browsers)
-    if (typeof window !== "undefined" && "vibrate" in navigator) {
-      try {
-        navigator.vibrate([60, 40, 70]);
-      } catch {}
+    if (typeof window !== "undefined") {
+      if ("vibrate" in navigator) {
+        try {
+          navigator.vibrate([60, 40, 70]);
+        } catch {}
+      }
+      window.dispatchEvent(new CustomEvent("candlemate-item-added"));
     }
 
     setLastAdded({ product: p, time: Date.now() });
+    setTimeout(() => {
+      setLastAdded(null);
+    }, 1000);
 
     setItems((x) => {
       const found = x.find((i) => i.id === p.id);

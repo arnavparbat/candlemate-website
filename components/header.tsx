@@ -1,25 +1,34 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useCart } from "./cart-context";
 
 export function Header() {
-  const { items, lastAdded } = useCart();
+  const { items } = useCart();
+  const pathname = usePathname();
   const count = items.reduce((s, i) => s + i.quantity, 0);
   const [isVibrating, setIsVibrating] = useState(false);
 
-  // Trigger vibration whenever a product is added
+  // Trigger shake animation ONLY when a product is explicitly added to the bag
   useEffect(() => {
-    if (!lastAdded) return;
-    setIsVibrating(true);
+    // Never shake when on the cart or checkout page
+    if (pathname === "/cart" || pathname === "/checkout") return;
 
-    const vibrateTimer = setTimeout(() => setIsVibrating(false), 1200);
-
-    return () => {
-      clearTimeout(vibrateTimer);
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const handleItemAdded = () => {
+      setIsVibrating(true);
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => setIsVibrating(false), 900);
     };
-  }, [lastAdded]);
+
+    window.addEventListener("candlemate-item-added", handleItemAdded);
+    return () => {
+      window.removeEventListener("candlemate-item-added", handleItemAdded);
+      if (timer) clearTimeout(timer);
+    };
+  }, [pathname]);
 
   return (
     <header className="sticky top-0 z-40 border-b border-[#5c39271a] bg-[#fff8ed]/95 backdrop-blur transition-all">
