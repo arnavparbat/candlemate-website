@@ -19,6 +19,14 @@ export default function Checkout() {
   const [shot, setShot] = useState("");
   const [order, setOrder] = useState<any>(null);
 
+  // Snapshot of order details preserved when cart items are cleared on order placement
+  const [placedOrder, setPlacedOrder] = useState<{
+    id: string;
+    customer: { name: string; address: string; phone: string };
+    items: Array<{ name: string; quantity: number; price: number }>;
+    total: number;
+  } | null>(null);
+
   // UPI Pop-up and Payment States
   const [showUpiModal, setShowUpiModal] = useState(false);
   const [appLaunched, setAppLaunched] = useState(false);
@@ -198,10 +206,14 @@ export default function Checkout() {
       }
     }
 
+    const orderItemsSnapshot = [...items];
+    const orderTotalSnapshot = total;
+    const orderFormSnapshot = { ...form };
+
     const res = await fetch("/api/orders", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ customer: form, items, screenshot: finalScreenshot }),
+      body: JSON.stringify({ customer: orderFormSnapshot, items: orderItemsSnapshot, screenshot: finalScreenshot }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -209,10 +221,52 @@ export default function Checkout() {
       setPhase("pay");
       return;
     }
+
+    // Save snapshot of order with candle names, quantities, and total so receipt stays complete after clearing cart
+    setPlacedOrder({
+      id: data.id || "CM-STUDIO",
+      customer: orderFormSnapshot,
+      items: orderItemsSnapshot,
+      total: orderTotalSnapshot,
+    });
     setOrder(data);
     clear();
     setTimeout(() => setPhase("done"), 3300);
   }
+
+  // Pre-format WhatsApp Message and Direct Link to +91 9552682389
+  const studioWhatsappNumber = "919552682389";
+  const orderCandles = placedOrder?.items || order?.items || items;
+  const candleListText =
+    orderCandles && orderCandles.length > 0
+      ? orderCandles
+          .map(
+            (item: any) =>
+              `• ${item.quantity}x ${item.name} (₹${Number(item.price) * Number(item.quantity)})`
+          )
+          .join("\n")
+      : "• Handcrafted Soy Candle";
+
+  const displayTotal = placedOrder?.total ?? order?.total ?? total;
+  const displayId = placedOrder?.id || order?.id || "CM-STUDIO";
+  const displayName = placedOrder?.customer?.name || form.name;
+  const displayPhone = placedOrder?.customer?.phone || form.phone;
+  const displayAddress = placedOrder?.customer?.address || form.address;
+
+  const whatsappMessage =
+    `👋 *Hi Candlemate Studio!* I just placed an order on your website.\n\n` +
+    `🧾 *Order ID:* ${displayId}\n` +
+    `👤 *Name:* ${displayName}\n` +
+    `📞 *Phone:* ${displayPhone}\n` +
+    `📍 *Delivery Address:*\n${displayAddress}\n\n` +
+    `🕯️ *Ordered Candles:*\n${candleListText}\n\n` +
+    `💰 *Order Total:* ₹${displayTotal}\n` +
+    `🖼️ *Payment Screenshot:* Uploaded on website ✓\n\n` +
+    `Please confirm my order and start crafting! ✨`;
+
+  const whatsappUrl = `https://api.whatsapp.com/send?phone=${studioWhatsappNumber}&text=${encodeURIComponent(
+    whatsappMessage
+  )}`;
 
   return (
     <>
@@ -559,44 +613,63 @@ export default function Checkout() {
             <div className="my-2">
               <Candle stage="done" />
             </div>
-            <h2 className="display mt-5 text-3xl text-ink">Thank you, {form.name}!</h2>
+            <h2 className="display mt-5 text-3xl text-ink">Thank you, {displayName}!</h2>
             <p className="mt-2 text-[#765442]">We’ve received your order and started crafting.</p>
+
+            {/* Order Confirmation Card with Candle Items Breakdown */}
             <div className="mt-6 rounded-2xl bg-[#fff8ed] p-5 border border-[#8a614820] w-full text-left">
-              <p className="text-xs text-[#765442] uppercase tracking-wider font-semibold">Order Confirmation ID</p>
-              <p className="display mt-1 text-2xl font-bold text-clay">{order?.id || "CM-STUDIO"}</p>
+              <div className="flex justify-between items-center pb-3 border-b border-[#8a614815]">
+                <p className="text-xs text-[#765442] uppercase tracking-wider font-semibold">Order ID</p>
+                <p className="display text-xl font-bold text-clay">{displayId}</p>
+              </div>
+
+              <div className="py-3 border-b border-[#8a614815]">
+                <p className="text-xs text-[#765442] uppercase tracking-wider font-semibold mb-2">Candles Ordered</p>
+                <div className="space-y-1.5">
+                  {orderCandles.map((item: any, idx: number) => (
+                    <div key={idx} className="flex justify-between text-xs text-[#765442]">
+                      <span>
+                        <b className="text-ink font-semibold">{item.quantity}x</b> {item.name}
+                      </span>
+                      <span className="font-semibold text-ink">
+                        ₹{Number(item.price) * Number(item.quantity)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pt-3 flex justify-between items-center text-xs">
+                <span className="font-semibold text-[#765442]">Total Paid:</span>
+                <span className="display text-lg font-bold text-ink">₹{displayTotal}</span>
+              </div>
+
               <p className="mt-3 text-xs text-[#765442] leading-relaxed">
-                We’ll message updates to <b className="text-ink">{form.phone}</b> as your candle moves through our studio.
+                We’ll message delivery updates to <b className="text-ink">{displayPhone}</b> as your candle is poured and packed.
               </p>
             </div>
 
-            {/* Direct WhatsApp Bridge from Customer to Studio */}
-            <a
-              href={`https://api.whatsapp.com/send?text=${encodeURIComponent(
-                `👋 Hi Candlemate Studio! I just placed an order on your website.\n\n` +
-                  `🧾 Order ID: ${order?.id || "CM-STUDIO"}\n` +
-                  `👤 Name: ${form.name}\n` +
-                  `📞 Phone: ${form.phone}\n` +
-                  `📍 Delivery Address:\n${form.address}\n\n` +
-                  `🕯️ Ordered Candles:\n${items
-                    .map((item) => `• ${item.quantity}x ${item.name} (₹${item.price * item.quantity})`)
-                    .join("\n")}\n\n` +
-                  `💰 Order Total: ₹${total}\n` +
-                  `🖼️ Payment screenshot uploaded on site.\n\n` +
-                  `Please confirm receipt and start crafting my order!`
-              )}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-4 flex items-center justify-center gap-2.5 w-full rounded-full bg-[#25D366] px-6 py-3.5 text-sm font-semibold text-white hover:bg-[#1faa4b] transition shadow-md cursor-pointer"
-            >
-              <svg className="h-5 w-5 fill-current" viewBox="0 0 24 24">
-                <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z" />
-              </svg>
-              Send Order Receipt on WhatsApp ↗
-            </a>
+            {/* Direct 1-Touch WhatsApp Bridge to Studio Phone 9552682389 */}
+            <div className="mt-5 w-full">
+              <a
+                href={whatsappUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2.5 w-full rounded-full bg-[#25D366] px-6 py-4 text-sm font-bold text-white hover:bg-[#1faa4b] transition shadow-md cursor-pointer"
+              >
+                <svg className="h-5 w-5 fill-current shrink-0" viewBox="0 0 24 24">
+                  <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z" />
+                </svg>
+                <span>Send Order Receipt to Studio WhatsApp ↗</span>
+              </a>
+              <p className="mt-2 text-xs text-[#765442] text-center font-medium">
+                Opens chat directly with <b>+91 9552682389</b> — just tap the send button!
+              </p>
+            </div>
 
             <Link
               href="/"
-              className="mt-4 inline-block rounded-full bg-ink px-8 py-3 text-sm font-medium text-cream hover:bg-clay transition"
+              className="mt-6 inline-block rounded-full bg-ink px-8 py-3 text-sm font-medium text-cream hover:bg-clay transition"
             >
               Browse more candles
             </Link>
