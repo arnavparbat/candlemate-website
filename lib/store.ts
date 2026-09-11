@@ -55,7 +55,7 @@ export function pruneExpiredScreenshots(store: Store): boolean {
 export async function getCloudflareKV(): Promise<any | null> {
   try {
     const { getCloudflareContext } = await import("@opennextjs/cloudflare");
-    const ctx = getCloudflareContext() as any;
+    const ctx = (await getCloudflareContext({ async: true })) as any;
     if (ctx && ctx.env) {
       const kv =
         ctx.env.CANDLEMATE_ORDERS ||
