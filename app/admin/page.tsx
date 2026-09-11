@@ -208,7 +208,43 @@ export default function Admin() {
   useEffect(() => {
     load();
 
-    // Live order stream via Server-Sent Events (SSE)
+    const handleIncomingNewOrder = (incoming: Order) => {
+      if (!incoming || !incoming.id) return;
+      setOrders((prev) => {
+        if (prev.some((o) => o.id === incoming.id)) return prev;
+        playOrderChime();
+        setNewOrderAlert(incoming);
+        return [incoming, ...prev];
+      });
+    };
+
+    // 1. Instant Tab-to-Tab Broadcast Channel (0ms latency)
+    let channel: BroadcastChannel | null = null;
+    if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+      try {
+        channel = new BroadcastChannel("candlemate_orders_stream");
+        channel.onmessage = (e) => {
+          if (e.data?.type === "NEW_ORDER" && e.data.order) {
+            handleIncomingNewOrder(e.data.order);
+          }
+        };
+      } catch {}
+    }
+
+    // 2. Storage event listener (instant cross-window notification)
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === "candlemate_latest_order_event" && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (parsed?.order) {
+            handleIncomingNewOrder(parsed.order);
+          }
+        } catch {}
+      }
+    };
+    window.addEventListener("storage", onStorage);
+
+    // 3. Live order stream via Server-Sent Events (SSE)
     let eventSource: EventSource | null = null;
     try {
       eventSource = new EventSource("/api/orders/live");
@@ -219,12 +255,7 @@ export default function Admin() {
         try {
           const data = JSON.parse(e.data);
           if (data.type === "NEW_ORDER" && data.order) {
-            setOrders((prev) => {
-              if (prev.some((o) => o.id === data.order.id)) return prev;
-              return [data.order, ...prev];
-            });
-            setNewOrderAlert(data.order);
-            playOrderChime();
+            handleIncomingNewOrder(data.order);
           } else if (data.type === "STATUS_UPDATED") {
             setOrders((prev) =>
               prev.map((o) => (o.id === data.id ? { ...o, status: data.status } : o))
@@ -247,9 +278,12 @@ export default function Admin() {
       setIsLiveConnected(false);
     }
 
-    // Auto-polling heartbeat every 8 seconds to ensure customer orders always reach studio
+    // 4. Ultra-fast polling heartbeat every 1.5s to ensure orders arrive within 2 seconds across any device
     const pollInterval = setInterval(() => {
-      fetch("/api/admin/orders")
+      fetch(`/api/admin/orders?_t=${Date.now()}`, {
+        cache: "no-store",
+        headers: { "Cache-Control": "no-cache" },
+      })
         .then((r) => r.json())
         .then((freshOrders) => {
           if (Array.isArray(freshOrders)) {
@@ -266,10 +300,12 @@ export default function Admin() {
           }
         })
         .catch(() => {});
-    }, 8000);
+    }, 1500);
 
     return () => {
       if (eventSource) eventSource.close();
+      if (channel) channel.close();
+      window.removeEventListener("storage", onStorage);
       clearInterval(pollInterval);
     };
   }, []);

@@ -3,6 +3,8 @@ import { notifyStudioNewOrder } from "@/lib/order-events";
 import { Order } from "@/lib/types";
 import { NextResponse } from "next/server";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();

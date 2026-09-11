@@ -87,7 +87,7 @@ export default function Checkout() {
     }
   }
 
-  function fileToOptimizedScreenshot(file: File, maxDim = 1200, quality = 0.82): Promise<string> {
+  function fileToOptimizedScreenshot(file: File, maxDim = 800, quality = 0.72): Promise<string> {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -129,7 +129,7 @@ export default function Checkout() {
     if (f.size > 15_000_000) return setError("Please choose an image smaller than 15 MB.");
     setError("");
     try {
-      // Compress and optimize screenshot client-side so it uploads quickly and uses minimal cloud storage
+      // Compress and optimize screenshot client-side so it uploads quickly in <200ms
       const optimized = await fileToOptimizedScreenshot(f);
       setShot(optimized);
     } catch {
@@ -144,20 +144,42 @@ export default function Checkout() {
     setError("");
     setPhase("burning");
 
-    const res = await fetch("/api/orders", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ customer: form, items, screenshot: shot }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      setError(data.error);
+    try {
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customer: form, items, screenshot: shot }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Could not complete order. Please try again.");
+        setPhase("pay");
+        return;
+      }
+      setOrder(data);
+
+      // Instantaneous Broadcast to active Studio dashboard tabs (0ms latency)
+      if (typeof window !== "undefined") {
+        try {
+          if ("BroadcastChannel" in window) {
+            const bc = new BroadcastChannel("candlemate_orders_stream");
+            bc.postMessage({ type: "NEW_ORDER", order: data });
+            bc.close();
+          }
+          localStorage.setItem(
+            "candlemate_latest_order_event",
+            JSON.stringify({ order: data, timestamp: Date.now() })
+          );
+        } catch {}
+      }
+
+      clear();
+      setTimeout(() => setPhase("done"), 3300);
+    } catch (err) {
+      console.error("Order submit failed:", err);
+      setError("Network error while completing order. Please try again.");
       setPhase("pay");
-      return;
     }
-    setOrder(data);
-    clear();
-    setTimeout(() => setPhase("done"), 3300);
   }
 
   return (
