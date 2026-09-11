@@ -497,7 +497,7 @@ export default function Checkout() {
 
             {/* Direct WhatsApp Bridge from Customer to Studio */}
             <a
-              href={`https://api.whatsapp.com/send?text=${encodeURIComponent(
+              href={`https://api.whatsapp.com/send?phone=919552682389&text=${encodeURIComponent(
                 `👋 Hi Candlemate Studio! I just placed an order on your website.\n\n` +
                   `🧾 Order ID: ${order?.id || "CM-STUDIO"}\n` +
                   `👤 Name: ${form.name}\n` +

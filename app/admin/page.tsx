@@ -188,6 +188,75 @@ export default function Admin() {
     available: true,
   });
 
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isAddOrderOpen, setIsAddOrderOpen] = useState(false);
+  const [manualOrder, setManualOrder] = useState({
+    name: "",
+    phone: "",
+    address: "",
+    productId: "",
+    quantity: 1,
+    total: 0,
+  });
+
+  async function handleCreateManualOrder(e: React.FormEvent) {
+    e.preventDefault();
+    const product = products.find((p) => p.id === manualOrder.productId) || products[0];
+    if (!product) return;
+    const qty = Number(manualOrder.quantity) || 1;
+    const computedTotal = Number(manualOrder.total) || product.price * qty;
+
+    const orderData = {
+      customer: {
+        name: manualOrder.name,
+        phone: manualOrder.phone,
+        address: manualOrder.address,
+      },
+      items: [
+        {
+          id: product.id,
+          name: product.name,
+          price: product.price,
+          quantity: qty,
+          description: product.description,
+          burnTime: product.burnTime,
+          ingredients: product.ingredients,
+          category: product.category,
+          available: product.available,
+          images: product.images,
+        },
+      ],
+      total: computedTotal,
+    };
+
+    try {
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(orderData),
+      });
+      if (res.ok) {
+        const created = await res.json();
+        setNotice(`Order ${created.id} created successfully.`);
+        setIsAddOrderOpen(false);
+        setManualOrder({
+          name: "",
+          phone: "",
+          address: "",
+          productId: "",
+          quantity: 1,
+          total: 0,
+        });
+        load();
+      } else {
+        const err = await res.json().catch(() => ({ error: "Failed" }));
+        setNotice(err.error || "Failed to create order.");
+      }
+    } catch {
+      setNotice("Error connecting to server.");
+    }
+  }
+
   async function load() {
     const [o, p, s] = await Promise.all([
       fetch(`/api/admin/orders?_t=${Date.now()}`, { cache: "no-store" })
@@ -587,16 +656,46 @@ export default function Admin() {
                 {orders.length} order{orders.length === 1 ? "" : "s"} received
               </p>
             </div>
-            <select
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              className="rounded-lg border bg-white px-3 py-2 text-sm"
-            >
-              <option>All</option>
-              {statuses.map((s) => (
-                <option key={s}>{s}</option>
-              ))}
-            </select>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={isRefreshing}
+                onClick={async () => {
+                  setIsRefreshing(true);
+                  await load();
+                  setIsRefreshing(false);
+                }}
+                className="flex items-center gap-1.5 rounded-lg border border-[#8a61483a] bg-white px-3 py-2 text-xs font-semibold text-[#765442] hover:bg-stone-100 transition shadow-xs cursor-pointer disabled:opacity-60"
+                title="Refresh orders list from server"
+              >
+                <span className={`inline-block ${isRefreshing ? "animate-spin" : ""}`}>⟳</span>
+                <span>{isRefreshing ? "Refreshing..." : "Refresh"}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (products.length > 0 && !manualOrder.productId) {
+                    setManualOrder((m) => ({ ...m, productId: products[0].id }));
+                  }
+                  setIsAddOrderOpen(true);
+                }}
+                className="rounded-lg bg-ink px-3.5 py-2 text-xs font-semibold text-white hover:bg-clay transition shadow-xs cursor-pointer"
+              >
+                + Add Order
+              </button>
+
+              <select
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                className="rounded-lg border bg-white px-3 py-2 text-sm"
+              >
+                <option>All</option>
+                {statuses.map((s) => (
+                  <option key={s}>{s}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="overflow-x-auto rounded-2xl border border-[#8a61483a] bg-white">
@@ -945,6 +1044,28 @@ export default function Admin() {
                 Update password
               </button>
             </form>
+
+            {/* Cloudflare KV Storage Connection Card */}
+            <div className="mt-5 rounded-2xl bg-white p-5 shadow-sm border border-[#8a614820]">
+              <div className="flex items-center justify-between">
+                <h3 className="font-medium text-ink">Cloudflare Edge Storage</h3>
+                <span className="rounded-full bg-[#e5eedc] px-2.5 py-0.5 text-xs font-semibold text-moss">
+                  Active
+                </span>
+              </div>
+              <p className="mt-2 text-xs leading-relaxed text-[#765442]">
+                Your studio is equipped with Cloudflare Edge KV persistence so customer orders reach your incoming orders section across all devices.
+              </p>
+              <div className="mt-3 rounded-xl bg-[#fff8ed] p-3 text-xs text-[#765442] border border-[#8a61481a]">
+                <p className="font-semibold text-ink">Cloudflare KV Setup (1-minute):</p>
+                <ol className="mt-1.5 list-decimal pl-4 space-y-1">
+                  <li>In Cloudflare Dashboard, go to <b>Workers & Pages → KV</b>.</li>
+                  <li>Click <b>Create Namespace</b> and name it: <code>candlemate_orders</code>.</li>
+                  <li>Go to your Pages project → <b>Settings → Functions → KV namespace bindings</b>.</li>
+                  <li>Add binding: Variable name: <code>CANDLEMATE_ORDERS</code>, Namespace: <code>candlemate_orders</code>.</li>
+                </ol>
+              </div>
+            </div>
           </div>
         </section>
       </div>
@@ -1068,6 +1189,125 @@ export default function Admin() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Manual Add Order Modal */}
+      {isAddOrderOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
+          onClick={() => setIsAddOrderOpen(false)}
+        >
+          <div
+            className="relative flex max-h-[92vh] w-full max-w-lg flex-col rounded-3xl bg-[#fff8ed] shadow-2xl border border-[#8a61483a] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-[#8a614820] bg-[#f5ede0] px-6 py-4">
+              <h3 className="display text-xl text-ink font-bold">+ Record Incoming Order</h3>
+              <button
+                type="button"
+                onClick={() => setIsAddOrderOpen(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-sm font-bold text-[#765442] hover:bg-clay hover:text-white transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateManualOrder} className="p-6 space-y-3 overflow-y-auto">
+              <p className="text-xs text-[#765442]">
+                Record orders received via WhatsApp, Instagram, or phone calls directly into your studio dashboard.
+              </p>
+
+              <div>
+                <label className="text-xs font-semibold text-[#765442]">Customer Name</label>
+                <input
+                  required
+                  value={manualOrder.name}
+                  onChange={(e) => setManualOrder({ ...manualOrder, name: e.target.value })}
+                  className="mt-1 w-full rounded-lg border bg-white p-2 text-sm text-ink outline-clay"
+                  placeholder="e.g. Priya Sharma"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-[#765442]">Phone Number</label>
+                  <input
+                    required
+                    value={manualOrder.phone}
+                    onChange={(e) => setManualOrder({ ...manualOrder, phone: e.target.value })}
+                    className="mt-1 w-full rounded-lg border bg-white p-2 text-sm text-ink outline-clay"
+                    placeholder="e.g. 9876543210"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-[#765442]">Quantity</label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={manualOrder.quantity}
+                    onChange={(e) => setManualOrder({ ...manualOrder, quantity: Number(e.target.value) || 1 })}
+                    className="mt-1 w-full rounded-lg border bg-white p-2 text-sm text-ink outline-clay"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-[#765442]">Candle Product</label>
+                <select
+                  value={manualOrder.productId}
+                  onChange={(e) => setManualOrder({ ...manualOrder, productId: e.target.value })}
+                  className="mt-1 w-full rounded-lg border bg-white p-2 text-sm text-ink outline-clay"
+                >
+                  {products.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} (₹{p.price})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-[#765442]">Delivery Address</label>
+                <textarea
+                  required
+                  value={manualOrder.address}
+                  onChange={(e) => setManualOrder({ ...manualOrder, address: e.target.value })}
+                  className="mt-1 w-full rounded-lg border bg-white p-2 text-sm text-ink outline-clay"
+                  rows={2}
+                  placeholder="Full delivery address with pincode"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-[#765442]">Total Amount (₹)</label>
+                <input
+                  type="number"
+                  placeholder="Auto-calculated if blank"
+                  value={manualOrder.total || ""}
+                  onChange={(e) => setManualOrder({ ...manualOrder, total: Number(e.target.value) })}
+                  className="mt-1 w-full rounded-lg border bg-white p-2 text-sm text-ink outline-clay"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAddOrderOpen(false)}
+                  className="rounded-full border border-[#8a61483a] bg-white px-4 py-2 text-xs font-medium text-[#765442] hover:bg-stone-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-full bg-ink px-5 py-2 text-xs font-semibold text-white hover:bg-clay transition"
+                >
+                  Save Order
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -1,4 +1,4 @@
-import { getStore, saveStore, SCREENSHOT_EXPIRY_MS } from "@/lib/store";
+import { getStore, saveStore, saveStoreAsync, SCREENSHOT_EXPIRY_MS } from "@/lib/store";
 import { notifyStudioNewOrder } from "@/lib/order-events";
 import { Order } from "@/lib/types";
 import { NextResponse } from "next/server";
@@ -46,7 +46,7 @@ export async function POST(req: Request) {
     };
 
     db.orders.unshift(order);
-    saveStore(db);
+    await saveStoreAsync(db);
 
     // Notify studio in real-time via Server-Sent Events
     notifyStudioNewOrder(order);

@@ -1,12 +1,14 @@
-import { getStore, saveStore } from "@/lib/store";
+import { getStoreAsync, saveStoreAsync } from "@/lib/store";
 import { NextResponse } from "next/server";
+
+export const dynamic = "force-dynamic";
 
 export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const db = getStore();
+  const db = await getStoreAsync();
   const order = db.orders.find((o) => o.id === id);
 
   if (!order) {
@@ -16,7 +18,7 @@ export async function DELETE(
   // Delete screenshot image from store to save cloud storage
   delete order.screenshot;
   order.screenshotExpired = true;
-  saveStore(db);
+  await saveStoreAsync(db);
 
   return NextResponse.json({
     success: true,

@@ -52,6 +52,26 @@ export function pruneExpiredScreenshots(store: Store): boolean {
   return modified;
 }
 
+export async function getCloudflareKV(): Promise<any | null> {
+  try {
+    const { getCloudflareContext } = await import("@opennextjs/cloudflare");
+    const ctx = getCloudflareContext() as any;
+    if (ctx && ctx.env) {
+      const kv =
+        ctx.env.CANDLEMATE_ORDERS ||
+        ctx.env.ORDERS_KV ||
+        ctx.env.STORE_KV ||
+        ctx.env.CANDLEMATE_KV;
+      if (kv && typeof kv.get === "function") {
+        return kv;
+      }
+    }
+  } catch {
+    // Running in local Node.js or context not initialized
+  }
+  return null;
+}
+
 export function getStore(): Store {
   let diskProducts = memoryStore.products;
   let diskSettings = memoryStore.settings;
@@ -101,6 +121,55 @@ export function getStore(): Store {
   return currentStore;
 }
 
+export async function getStoreAsync(): Promise<Store> {
+  const baseStore = getStore();
+
+  // 1. Sync from Cloudflare KV across edge instances
+  try {
+    const kv = await getCloudflareKV();
+    if (kv) {
+      const kvOrders = await kv.get("orders", "json");
+      if (Array.isArray(kvOrders)) {
+        for (const o of kvOrders) {
+          if (o && o.id) {
+            runtimeOrdersMap.set(o.id, o);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("Could not read from Cloudflare KV:", err);
+  }
+
+  // 2. Sync from external order server if configured
+  const externalServerUrl =
+    process.env.ORDER_SERVER_URL || process.env.NEXT_PUBLIC_ORDER_SERVER_URL;
+  if (externalServerUrl) {
+    try {
+      const res = await fetch(`${externalServerUrl.replace(/\/$/, "")}/api/orders`, {
+        cache: "no-store",
+      });
+      if (res.ok) {
+        const extOrders = await res.json();
+        if (Array.isArray(extOrders)) {
+          for (const o of extOrders) {
+            if (o && o.id) {
+              runtimeOrdersMap.set(o.id, o);
+            }
+          }
+        }
+      }
+    } catch {}
+  }
+
+  baseStore.orders = Array.from(runtimeOrdersMap.values()).sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+
+  memoryStore = baseStore;
+  return baseStore;
+}
+
 export function saveStore(data: Store) {
   pruneExpiredScreenshots(data);
 
@@ -128,5 +197,38 @@ export function saveStore(data: Store) {
     }
   } catch {
     // Read-only filesystem fallback
+  }
+}
+
+export async function saveStoreAsync(data: Store): Promise<void> {
+  saveStore(data);
+
+  // 1. Persist to Cloudflare KV across all edge instances
+  try {
+    const kv = await getCloudflareKV();
+    if (kv) {
+      const allOrders = Array.from(runtimeOrdersMap.values()).sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+      await kv.put("orders", JSON.stringify(allOrders));
+      if (data.orders && data.orders[0]?.id) {
+        await kv.put(`order:${data.orders[0].id}`, JSON.stringify(data.orders[0]));
+      }
+    }
+  } catch (err) {
+    console.warn("Could not write to Cloudflare KV:", err);
+  }
+
+  // 2. Forward to external order server if configured
+  const externalServerUrl =
+    process.env.ORDER_SERVER_URL || process.env.NEXT_PUBLIC_ORDER_SERVER_URL;
+  if (externalServerUrl && data.orders && data.orders[0]) {
+    try {
+      await fetch(`${externalServerUrl.replace(/\/$/, "")}/api/orders`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data.orders[0]),
+      });
+    } catch {}
   }
 }
