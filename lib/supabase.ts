@@ -4,8 +4,14 @@ import { Order } from "./types";
 const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const rawKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
+function cleanSupabaseUrl(url?: string): string {
+  if (!url) return "https://placeholder.supabase.co";
+  return url.replace(/\/rest\/v1\/?$/, "").replace(/\/$/, "");
+}
+
 // Safe fallback for build phase so Next.js static page collection never crashes
-const supabaseUrl = rawUrl && rawUrl.startsWith("http") ? rawUrl : "https://placeholder.supabase.co";
+const cleanUrl = cleanSupabaseUrl(rawUrl);
+const supabaseUrl = cleanUrl.startsWith("http") ? cleanUrl : "https://placeholder.supabase.co";
 const supabaseAnonKey = rawKey || "placeholder-anon-key";
 
 /**

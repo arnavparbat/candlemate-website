@@ -25,8 +25,8 @@
 		"binding": "IMAGES"
 	},
 	"vars": {
-		"NEXT_PUBLIC_SUPABASE_URL": "https://your-project-id.supabase.co",
-		"NEXT_PUBLIC_SUPABASE_ANON_KEY": "your-supabase-anon-key",
+		"NEXT_PUBLIC_SUPABASE_URL": "https://xttldmenzgqeprjnlzqt.supabase.co",
+		"NEXT_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh0dGxkbWVuemdxZXByam5senF0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkxNDM5MDYsImV4cCI6MjEwNDcxOTkwNn0.Xj9JzF7aEIA4KjxtAEafLRPGp_WrF6-AHv5jwgA7nZ4",
 		"UPI_ID": "9552682389@ybl",
 		"NEXT_PUBLIC_UPI_ID": "9552682389@ybl"
 	}
