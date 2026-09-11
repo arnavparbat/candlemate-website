@@ -2,9 +2,10 @@
 
 import { Header } from "@/components/header";
 import { useCart } from "@/components/cart-context";
-import { Candle } from "@/components/candle";
+import { Candle, CandleStage } from "@/components/candle";
 import { QRCodeSVG } from "qrcode.react";
 import { FormEvent, useEffect, useState } from "react";
+import Link from "next/link";
 
 type Phase = "details" | "pay" | "burning" | "done";
 
@@ -24,6 +25,15 @@ export default function Checkout() {
   }, []);
 
   const paymentUri = `upi://pay?pa=${upi}&pn=Candlemate&am=${total}&cu=INR`;
+
+  const candleStage: CandleStage =
+    phase === "details"
+      ? "checkout"
+      : phase === "pay"
+      ? "lighting"
+      : phase === "burning"
+      ? "burning"
+      : "done";
 
   function details(e: FormEvent) {
     e.preventDefault();
@@ -68,133 +78,286 @@ export default function Checkout() {
   return (
     <>
       <Header />
-      <main className="relative mx-auto min-h-[75vh] max-w-5xl overflow-hidden px-5 py-12">
-        {/* Realistic Animated Candle showcasing the stage */}
-        <div className="pointer-events-none absolute right-2 bottom-4 md:right-10 md:top-24 md:bottom-auto opacity-80 md:opacity-100 transition-all duration-500">
-          <Candle
-            stage={
-              phase === "details"
-                ? "checkout"
-                : phase === "done"
-                ? "done"
-                : phase === "burning"
-                ? "burning"
-                : "checkout"
-            }
-          />
+      <main className="mx-auto min-h-[75vh] max-w-5xl px-5 py-8 sm:py-12">
+        {/* Step Progress Tracker */}
+        <div className="mb-6 flex items-center justify-between border-b border-[#8a61481a] pb-4">
+          <div className="flex items-center gap-2">
+            <span
+              className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold transition ${
+                phase === "details"
+                  ? "bg-ink text-white"
+                  : "bg-clay text-white"
+              }`}
+            >
+              {phase === "details" ? "1" : "✓"}
+            </span>
+            <span
+              className={`text-xs font-semibold uppercase tracking-wider transition ${
+                phase === "details" ? "text-ink" : "text-clay"
+              }`}
+            >
+              Delivery Details
+            </span>
+          </div>
+
+          <span className="h-px flex-1 mx-3 bg-[#8a614820] max-w-[50px] sm:max-w-[90px]" />
+
+          <div className="flex items-center gap-2">
+            <span
+              className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold transition ${
+                phase === "pay"
+                  ? "bg-ink text-white"
+                  : phase === "burning" || phase === "done"
+                  ? "bg-clay text-white"
+                  : "bg-[#8a614820] text-[#765442]"
+              }`}
+            >
+              {phase === "burning" || phase === "done" ? "✓" : "2"}
+            </span>
+            <span
+              className={`text-xs font-semibold uppercase tracking-wider transition ${
+                phase === "pay"
+                  ? "text-ink"
+                  : phase === "burning" || phase === "done"
+                  ? "text-clay"
+                  : "text-[#765442]/60"
+              }`}
+            >
+              Payment
+            </span>
+          </div>
+
+          <span className="h-px flex-1 mx-3 bg-[#8a614820] max-w-[50px] sm:max-w-[90px]" />
+
+          <div className="flex items-center gap-2">
+            <span
+              className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold transition ${
+                phase === "done"
+                  ? "bg-clay text-white"
+                  : phase === "burning"
+                  ? "bg-ink text-white animate-pulse"
+                  : "bg-[#8a614820] text-[#765442]"
+              }`}
+            >
+              3
+            </span>
+            <span
+              className={`text-xs font-semibold uppercase tracking-wider transition ${
+                phase === "done" || phase === "burning" ? "text-ink" : "text-[#765442]/60"
+              }`}
+            >
+              Ignition & Glow
+            </span>
+          </div>
         </div>
 
-        <div className="relative max-w-xl">
-          <p className="text-xs font-bold uppercase tracking-[.2em] text-clay">
-            A little closer to your glow
-          </p>
-          <h1 className="display mt-2 text-4xl sm:text-5xl text-ink">
-            {phase === "details"
-              ? "Delivery details"
-              : phase === "pay"
-              ? "Finish your payment"
-              : "Order received"}
-          </h1>
+        {/* Phase 1 & 2: Details and Payment (2-column layout on desktop, clean stacked layout on mobile) */}
+        {(phase === "details" || phase === "pay") && (
+          <div className="grid gap-8 md:grid-cols-[1fr_330px] items-start">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[.2em] text-clay">
+                A little closer to your glow
+              </p>
+              <h1 className="display mt-2 text-3xl sm:text-5xl text-ink">
+                {phase === "details" ? "Delivery details" : "Finish your payment"}
+              </h1>
 
-          {phase === "details" && (
-            <form onSubmit={details} className="paper mt-8 space-y-4 rounded-3xl p-6 shadow-sm">
-              <label className="block text-sm text-[#765442]">
-                Your name
-                <input
-                  required
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  className="mt-1 w-full rounded-xl border border-[#8a61483a] bg-white px-3 py-3 text-ink outline-clay"
-                  placeholder="Your full name"
-                />
-              </label>
-              <label className="block text-sm text-[#765442]">
-                Delivery address
-                <textarea
-                  required
-                  value={form.address}
-                  onChange={(e) => setForm({ ...form, address: e.target.value })}
-                  className="mt-1 h-24 w-full rounded-xl border border-[#8a61483a] bg-white px-3 py-3 text-ink outline-clay"
-                  placeholder="House, street, city and PIN code"
-                />
-              </label>
-              <label className="block text-sm text-[#765442]">
-                Phone / WhatsApp
-                <input
-                  required
-                  value={form.phone}
-                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                  className="mt-1 w-full rounded-xl border border-[#8a61483a] bg-white px-3 py-3 text-ink outline-clay"
-                  placeholder="98765 43210"
-                />
-              </label>
-              <p className="text-sm font-semibold text-clay">Order total: ₹{total}</p>
-              {error && <p className="text-sm text-red-700">{error}</p>}
-              <button className="w-full rounded-full bg-ink py-3 text-sm text-white hover:bg-clay transition">
-                Continue to payment
-              </button>
-            </form>
-          )}
-
-          {phase === "pay" && (
-            <div className="paper mt-8 rounded-3xl p-6 shadow-sm">
-              <div className="flex flex-wrap items-center gap-6">
-                <div className="rounded-2xl bg-white p-3 border border-[#8a614820] shadow-sm">
-                  <QRCodeSVG value={paymentUri} size={150} />
-                </div>
-                <div>
-                  <p className="text-sm text-[#765442]">Pay exactly</p>
-                  <p className="display text-4xl text-ink">₹{total}</p>
-                  <p className="mt-2 text-sm text-[#765442]">
-                    UPI ID: <b className="text-clay">{upi}</b>
-                  </p>
+              {/* Mobile Dedicated Candle Card — Cleanly placed ABOVE input fields, never in the background! */}
+              <div className="md:hidden mt-4 rounded-2xl border border-[#8a614822] bg-[#fffaf3] p-3.5 shadow-sm">
+                <div className="flex items-center gap-3.5">
+                  <div className="flex-shrink-0 w-20 h-24 rounded-xl bg-[#f5ebe0]/80 border border-[#8a614818] flex items-center justify-center overflow-hidden">
+                    <div className="scale-[0.52] origin-center -my-14 -mx-10">
+                      <Candle stage={candleStage} showBadge={false} />
+                    </div>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-clay animate-pulse" />
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-clay">
+                        {phase === "details" ? "Step 1 of 3 · Crafting" : "Step 2 of 3 · Payment"}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-sm font-semibold text-ink truncate">
+                      {phase === "details" ? "Spiral wick set in soy wax" : "Ember ready · Awaiting flame"}
+                    </p>
+                    <p className="mt-0.5 text-xs text-[#765442] line-clamp-1">
+                      {phase === "details"
+                        ? "Enter your delivery details below"
+                        : "Scan QR below to ignite the flame"}
+                    </p>
+                    <div className="mt-2">
+                      <span className="inline-block text-[11px] font-medium text-clay bg-[#f5ebe0] rounded-full px-2.5 py-0.5">
+                        {phase === "details" ? "✓ Wax poured in studio" : "✓ Delivery details set"}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
-              <ol className="mt-6 list-decimal space-y-2 pl-5 text-sm leading-6 text-[#765442]">
-                <li>Scan this code with any UPI app (GPay, PhonePe, Paytm) and complete your payment.</li>
-                <li>Upload a screenshot below so our studio can match it quickly.</li>
-              </ol>
-              <label className="mt-6 block cursor-pointer rounded-xl border border-dashed border-[#a66a46] p-4 text-center text-sm text-clay hover:bg-[#fff8ed] transition">
-                {shot ? "Screenshot added ✓ — tap to change" : "Upload payment screenshot"}
-                <input
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp"
-                  className="hidden"
-                  onChange={upload}
-                />
-              </label>
-              {error && <p className="mt-3 text-sm text-red-700">{error}</p>}
-              <button
-                onClick={submit}
-                className="mt-4 w-full rounded-full bg-ink py-3 text-sm text-white hover:bg-clay transition"
-              >
-                I’ve paid — place my order
-              </button>
-            </div>
-          )}
 
-          {phase === "burning" && (
-            <div className="mt-8 paper rounded-3xl p-6 shadow-sm">
-              <p className="display text-2xl text-ink">Igniting your order...</p>
-              <p className="mt-2 text-sm text-[#765442]">
-                Your payment proof is on its way to our studio. The flame is lit!
-              </p>
-            </div>
-          )}
+              {/* Step 1: Input details form with solid background — completely clean and unobstructed */}
+              {phase === "details" && (
+                <form
+                  onSubmit={details}
+                  className="paper mt-5 space-y-4 rounded-3xl p-6 sm:p-8 shadow-sm bg-white/95"
+                >
+                  <label className="block text-sm text-[#765442]">
+                    Your name
+                    <input
+                      required
+                      value={form.name}
+                      onChange={(e) => setForm({ ...form, name: e.target.value })}
+                      className="mt-1.5 w-full rounded-xl border border-[#8a61483a] bg-white px-3.5 py-3 text-ink outline-clay focus:border-clay"
+                      placeholder="Your full name"
+                    />
+                  </label>
+                  <label className="block text-sm text-[#765442]">
+                    Delivery address
+                    <textarea
+                      required
+                      value={form.address}
+                      onChange={(e) => setForm({ ...form, address: e.target.value })}
+                      className="mt-1.5 h-24 w-full rounded-xl border border-[#8a61483a] bg-white px-3.5 py-3 text-ink outline-clay focus:border-clay"
+                      placeholder="House, street, city and PIN code"
+                    />
+                  </label>
+                  <label className="block text-sm text-[#765442]">
+                    Phone / WhatsApp
+                    <input
+                      required
+                      value={form.phone}
+                      onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                      className="mt-1.5 w-full rounded-xl border border-[#8a61483a] bg-white px-3.5 py-3 text-ink outline-clay focus:border-clay"
+                      placeholder="98765 43210"
+                    />
+                  </label>
+                  <div className="flex items-center justify-between pt-2">
+                    <span className="text-sm text-[#765442]">Order total:</span>
+                    <b className="display text-2xl text-ink">₹{total}</b>
+                  </div>
+                  {error && (
+                    <div className="rounded-xl bg-red-50 p-3 text-sm text-red-700 border border-red-200">
+                      {error}
+                    </div>
+                  )}
+                  <button className="w-full rounded-full bg-ink py-3.5 text-sm font-medium text-white hover:bg-clay transition shadow-sm">
+                    Continue to payment →
+                  </button>
+                </form>
+              )}
 
-          {phase === "done" && (
-            <div className="paper mt-8 rounded-3xl p-6 shadow-sm">
-              <p className="display text-2xl text-ink">Thank you, {form.name}!</p>
-              <p className="mt-2 text-[#765442]">We’ve received your order.</p>
-              <p className="mt-3 text-sm text-ink">
-                Your order ID: <b className="text-clay">{order?.id}</b>
-              </p>
-              <p className="mt-1 text-sm text-[#765442]">
-                We’ll message you on {form.phone} as it moves through the studio.
+              {/* Step 2: Payment Section */}
+              {phase === "pay" && (
+                <div className="paper mt-5 rounded-3xl p-6 sm:p-8 shadow-sm bg-white/95">
+                  <div className="flex flex-wrap items-center gap-6">
+                    <div className="rounded-2xl bg-white p-3 border border-[#8a614820] shadow-sm">
+                      <QRCodeSVG value={paymentUri} size={150} />
+                    </div>
+                    <div>
+                      <p className="text-sm text-[#765442]">Pay exactly</p>
+                      <p className="display text-4xl text-ink">₹{total}</p>
+                      <p className="mt-2 text-sm text-[#765442]">
+                        UPI ID: <b className="text-clay">{upi}</b>
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setPhase("details")}
+                        className="mt-2 text-xs text-clay underline hover:text-ink"
+                      >
+                        ← Edit delivery details
+                      </button>
+                    </div>
+                  </div>
+                  <ol className="mt-6 list-decimal space-y-2 pl-5 text-sm leading-6 text-[#765442]">
+                    <li>Scan this code with any UPI app (GPay, PhonePe, Paytm) and complete your payment.</li>
+                    <li>Upload a screenshot below so our studio can match it quickly.</li>
+                  </ol>
+                  <label className="mt-6 block cursor-pointer rounded-xl border border-dashed border-[#a66a46] p-4 text-center text-sm text-clay hover:bg-[#fff8ed] transition">
+                    {shot ? "Screenshot added ✓ — tap to change" : "Upload payment screenshot"}
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      className="hidden"
+                      onChange={upload}
+                    />
+                  </label>
+                  {error && (
+                    <div className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-700 border border-red-200">
+                      {error}
+                    </div>
+                  )}
+                  <button
+                    onClick={submit}
+                    className="mt-5 w-full rounded-full bg-ink py-3.5 text-sm font-medium text-white hover:bg-clay transition shadow-sm"
+                  >
+                    I’ve paid — place my order
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Dedicated Desktop Studio Crafting Sidebar Card */}
+            <aside className="hidden md:flex flex-col items-center paper rounded-3xl p-6 shadow-sm border border-[#8a61481a] sticky top-24 bg-white/90">
+              <div className="w-full flex items-center justify-between pb-3 border-b border-[#8a61481a] text-xs font-semibold text-clay uppercase tracking-wider">
+                <span>Studio Crafting</span>
+                <span>{phase === "details" ? "Step 1 of 3" : "Step 2 of 3"}</span>
+              </div>
+              <div className="py-5">
+                <Candle stage={candleStage} />
+              </div>
+              <div className="w-full pt-3 border-t border-[#8a61481a] text-center">
+                <p className="text-xs text-[#765442] leading-relaxed">
+                  {phase === "details" && "Your amber glass jar is poured with pure soy wax & spiral cotton wick."}
+                  {phase === "pay" && "Wick ember is set — scan UPI code to ignite your candle order."}
+                </p>
+                <div className="mt-4 bg-[#fff8ed] rounded-xl p-3 text-xs text-[#765442] flex justify-between items-center border border-[#8a614818]">
+                  <span>Order Total:</span>
+                  <b className="text-sm font-semibold text-ink">₹{total}</b>
+                </div>
+              </div>
+            </aside>
+          </div>
+        )}
+
+        {/* Phase 3: Burning / Igniting (Clean centered atmospheric experience) */}
+        {phase === "burning" && (
+          <div className="paper mx-auto max-w-lg rounded-3xl p-8 text-center shadow-md flex flex-col items-center bg-white/95">
+            <div className="my-2">
+              <Candle stage="burning" />
+            </div>
+            <h2 className="display mt-5 text-3xl text-ink">Igniting your order...</h2>
+            <p className="mt-2 text-sm text-[#765442]">
+              Your payment proof is on its way to our studio. The flame is lit!
+            </p>
+            <div className="mt-5 flex items-center gap-2 text-xs font-semibold text-clay bg-[#fff8ed] rounded-full px-4 py-1.5 border border-[#8a614820]">
+              <span className="h-2 w-2 rounded-full bg-clay animate-ping" />
+              <span>Connecting with candlemate studio...</span>
+            </div>
+          </div>
+        )}
+
+        {/* Phase 4: Order Completed / Done */}
+        {phase === "done" && (
+          <div className="paper mx-auto max-w-lg rounded-3xl p-8 text-center shadow-md flex flex-col items-center bg-white/95">
+            <div className="my-2">
+              <Candle stage="done" />
+            </div>
+            <h2 className="display mt-5 text-3xl text-ink">Thank you, {form.name}!</h2>
+            <p className="mt-2 text-[#765442]">We’ve received your order and started crafting.</p>
+            <div className="mt-6 rounded-2xl bg-[#fff8ed] p-5 border border-[#8a614820] w-full text-left">
+              <p className="text-xs text-[#765442] uppercase tracking-wider font-semibold">Order Confirmation ID</p>
+              <p className="display mt-1 text-2xl font-bold text-clay">{order?.id || "CM-STUDIO"}</p>
+              <p className="mt-3 text-xs text-[#765442] leading-relaxed">
+                We’ll message updates to <b className="text-ink">{form.phone}</b> as your candle moves through our studio.
               </p>
             </div>
-          )}
-        </div>
+            <Link
+              href="/"
+              className="mt-6 inline-block rounded-full bg-ink px-8 py-3.5 text-sm font-medium text-cream hover:bg-clay transition"
+            >
+              Browse more candles
+            </Link>
+          </div>
+        )}
       </main>
     </>
   );

@@ -11,16 +11,14 @@ export default function Cart() {
   return (
     <>
       <Header />
-      <main className="relative mx-auto min-h-[70vh] max-w-5xl overflow-hidden px-5 py-12">
-        {/* Realistic Animated Crafting Candle */}
-        <div className="pointer-events-none absolute right-2 bottom-4 sm:right-6 sm:bottom-8 opacity-75 sm:opacity-90 transition-opacity">
-          <Candle stage={items.length ? "filled" : "empty"} />
-        </div>
-
+      <main className="relative mx-auto min-h-[70vh] max-w-5xl px-5 py-8 sm:py-12">
         <h1 className="display text-4xl sm:text-5xl text-ink">Your candle bag</h1>
 
         {!items.length ? (
-          <div className="mt-10 paper max-w-lg rounded-3xl p-8 shadow-sm">
+          <div className="mt-10 paper max-w-lg rounded-3xl p-8 shadow-sm flex flex-col items-center text-center mx-auto sm:mx-0">
+            <div className="mb-4">
+              <Candle stage="empty" compact={true} />
+            </div>
             <p className="text-[#765442]">Your bag is waiting for a little glow.</p>
             <Link
               href="/"
@@ -30,7 +28,7 @@ export default function Cart() {
             </Link>
           </div>
         ) : (
-          <div className="mt-8 grid gap-8 md:grid-cols-[1fr_300px]">
+          <div className="mt-8 grid gap-8 md:grid-cols-[1fr_320px] items-start">
             <div className="space-y-4">
               {items.map((item) => (
                 <div key={item.id} className="paper flex gap-4 rounded-2xl p-4 shadow-sm">
@@ -69,16 +67,23 @@ export default function Cart() {
                 </div>
               ))}
             </div>
-            <aside className="paper h-fit rounded-3xl p-6 shadow-sm">
-              <p className="text-sm text-[#765442]">Subtotal</p>
-              <p className="display mt-1 text-4xl text-ink">₹{total}</p>
-              <p className="mt-2 text-xs text-[#765442]">Shipping is confirmed with your order.</p>
-              <Link
-                href="/checkout"
-                className="mt-6 block rounded-full bg-ink px-5 py-3 text-center text-sm text-white hover:bg-clay transition"
-              >
-                Continue to checkout
-              </Link>
+
+            {/* Sidebar Summary with Contained Animated Candle */}
+            <aside className="paper h-fit rounded-3xl p-6 shadow-sm flex flex-col items-center">
+              <div className="mb-3">
+                <Candle stage="filled" compact={true} />
+              </div>
+              <div className="w-full pt-3 border-t border-[#8a61481a]">
+                <p className="text-sm text-[#765442]">Subtotal</p>
+                <p className="display mt-1 text-4xl text-ink">₹{total}</p>
+                <p className="mt-2 text-xs text-[#765442]">Shipping is confirmed with your order.</p>
+                <Link
+                  href="/checkout"
+                  className="mt-6 block rounded-full bg-ink px-5 py-3.5 text-center text-sm font-medium text-white hover:bg-clay transition shadow-sm"
+                >
+                  Continue to checkout →
+                </Link>
+              </div>
             </aside>
           </div>
         )}

@@ -2,34 +2,43 @@
 
 import { motion } from "framer-motion";
 
-export type CandleStage = "empty" | "filled" | "checkout" | "burning" | "done";
+export type CandleStage = "empty" | "filled" | "checkout" | "lighting" | "burning" | "done";
 
 export function Candle({
   stage,
   compact = false,
   showBadge = true,
+  size = "normal",
 }: {
   stage: CandleStage;
   compact?: boolean;
   showBadge?: boolean;
+  size?: "mini" | "compact" | "normal";
 }) {
   const hasWax = stage !== "empty";
-  const hasWick = stage === "checkout" || stage === "burning" || stage === "done";
+  const hasWick = stage === "checkout" || stage === "lighting" || stage === "burning" || stage === "done";
+  const isLighting = stage === "lighting";
   const isBurning = stage === "burning" || stage === "done";
 
   const stageLabels: Record<CandleStage, string> = {
     empty: "Jar prepared",
     filled: "Soy wax poured",
     checkout: "Spiral wick set",
+    lighting: "Ember ready to light",
     burning: "Glowing warm flame",
     done: "Handcrafted & ready",
   };
 
+  const scaleClass =
+    size === "mini"
+      ? "scale-[0.62] origin-center -my-8"
+      : size === "compact" || compact
+      ? "scale-[0.78] sm:scale-100 origin-center"
+      : "";
+
   return (
     <div
-      className={`flex flex-col items-center select-none ${
-        compact ? "scale-[0.78] sm:scale-100 origin-center" : ""
-      }`}
+      className={`flex flex-col items-center select-none ${scaleClass}`}
       aria-label={`Candle crafting: ${stageLabels[stage]}`}
     >
       {/* Candle Assembly Container */}
@@ -46,6 +55,22 @@ export function Candle({
             style={{
               background:
                 "radial-gradient(circle, rgba(250, 175, 55, 0.5) 0%, rgba(225, 105, 25, 0.2) 45%, transparent 72%)",
+            }}
+          />
+        )}
+
+        {/* Soft Warm Halo when ember is lighting (payment step) */}
+        {isLighting && (
+          <motion.div
+            animate={{
+              opacity: [0.3, 0.6, 0.3],
+              scale: [0.94, 1.05, 0.94],
+            }}
+            transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+            className="absolute top-8 left-1/2 -translate-x-1/2 h-36 w-36 rounded-full pointer-events-none -z-10"
+            style={{
+              background:
+                "radial-gradient(circle, rgba(255, 150, 40, 0.42) 0%, rgba(225, 90, 20, 0.16) 45%, transparent 70%)",
             }}
           />
         )}
@@ -186,12 +211,34 @@ export function Candle({
                   cx="14.5"
                   cy="4.5"
                   r="1.8"
-                  fill={isBurning ? "#ff3700" : "#110603"}
+                  fill={isBurning || isLighting ? "#ff3700" : "#110603"}
                   style={{
-                    filter: isBurning ? "drop-shadow(0 0 5px #ff5500)" : "none",
+                    filter: isBurning || isLighting ? "drop-shadow(0 0 5px #ff5500)" : "none",
                   }}
                 />
               </svg>
+
+              {/* Glowing Ember Spark ready to catch fire in payment step */}
+              {isLighting && (
+                <motion.div
+                  animate={{
+                    scale: [0.8, 1.4, 0.8],
+                    opacity: [0.75, 1, 0.75],
+                  }}
+                  transition={{ duration: 1.1, repeat: Infinity, ease: "easeInOut" }}
+                  className="absolute pointer-events-none"
+                  style={{
+                    width: 7,
+                    height: 7,
+                    borderRadius: "50%",
+                    background: "radial-gradient(circle, #ffffff 15%, #ffb703 55%, #ff3700 100%)",
+                    boxShadow: "0 0 8px #ff7700, 0 0 16px #ff3700",
+                    top: 1,
+                    left: 14.5,
+                    transform: "translate(-50%, -50%)",
+                  }}
+                />
+              )}
             </motion.div>
           )}
 
@@ -306,6 +353,8 @@ export function Candle({
             className={`h-2 w-2 rounded-full ${
               stage === "done" || stage === "burning"
                 ? "bg-[#e5832d] shadow-[0_0_8px_#f19b45]"
+                : stage === "lighting"
+                ? "bg-[#ff5500] shadow-[0_0_8px_#ff7700] animate-pulse"
                 : stage === "checkout"
                 ? "bg-[#9e6741]"
                 : stage === "filled"
