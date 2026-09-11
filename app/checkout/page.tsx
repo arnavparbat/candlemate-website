@@ -17,7 +17,7 @@ export default function Checkout() {
       const saved = localStorage.getItem("candlemate_upi_id");
       if (saved) return saved;
     }
-    return process.env.NEXT_PUBLIC_UPI_ID || "candlemate@upi";
+    return process.env.NEXT_PUBLIC_UPI_ID || "9552682389@ybl";
   });
   const [form, setForm] = useState({ name: "", address: "", phone: "" });
   const [error, setError] = useState("");

@@ -55,7 +55,7 @@ export function getStore(): Store {
   if (envUpi) {
     if (!store.settings) {
       store.settings = { upiId: envUpi, adminPasswordHash: "" };
-    } else if (!store.settings.upiId || store.settings.upiId === "candlemate@upi") {
+    } else {
       store.settings.upiId = envUpi;
     }
   }

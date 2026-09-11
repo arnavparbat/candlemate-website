@@ -10,7 +10,7 @@ export async function GET() {
     process.env.NEXT_PUBLIC_UPI_ID ||
     process.env.UPI_ID ||
     store.settings?.upiId ||
-    "candlemate@upi";
+    "9552682389@ybl";
 
   return NextResponse.json(
     { upiId },
