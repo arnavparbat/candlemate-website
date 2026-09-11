@@ -97,7 +97,7 @@ export default function ProductPage() {
               {!product.available
                 ? "Currently sold out"
                 : justAdded
-                ? "✓ Added to bag! Check top right ↗"
+                ? "Added to bag"
                 : "Add to bag"}
             </button>
           </div>

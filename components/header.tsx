@@ -8,20 +8,16 @@ export function Header() {
   const { items, lastAdded } = useCart();
   const count = items.reduce((s, i) => s + i.quantity, 0);
   const [isVibrating, setIsVibrating] = useState(false);
-  const [toast, setToast] = useState<{ name: string; id: number } | null>(null);
 
-  // Trigger vibration, highlight ring, and toast whenever a product is added
+  // Trigger vibration whenever a product is added
   useEffect(() => {
     if (!lastAdded) return;
     setIsVibrating(true);
-    setToast({ name: lastAdded.product.name, id: lastAdded.time });
 
     const vibrateTimer = setTimeout(() => setIsVibrating(false), 1200);
-    const toastTimer = setTimeout(() => setToast(null), 3500);
 
     return () => {
       clearTimeout(vibrateTimer);
-      clearTimeout(toastTimer);
     };
   }, [lastAdded]);
 
@@ -37,16 +33,8 @@ export function Header() {
             Shop candles
           </a>
 
-          {/* Bag button with vibration animation, count badge, and floating notification */}
+          {/* Bag button with shake / vibration animation */}
           <div className="relative">
-            {/* Floating "+1 Added" badge animation */}
-            {isVibrating && (
-              <span className="animate-float-badge pointer-events-none absolute -top-5 right-2 z-50 flex items-center gap-0.5 rounded-full bg-[#a66a46] px-2 py-0.5 text-[11px] font-bold text-white shadow-md">
-                <span>+1</span>
-                <span>✨</span>
-              </span>
-            )}
-
             <Link
               href="/cart"
               className={`relative flex items-center gap-2 rounded-full px-4 py-2 font-medium transition-all duration-300 shadow-xs ${
@@ -89,22 +77,6 @@ export function Header() {
           </div>
         </nav>
       </div>
-
-      {/* Floating alert banner below header when item is added */}
-      {toast && (
-        <div className="absolute left-0 right-0 top-full flex justify-center px-4 pt-2 pointer-events-none">
-          <Link
-            href="/cart"
-            className="pointer-events-auto flex items-center gap-2 rounded-full bg-ink px-4 py-2 text-xs text-white shadow-xl ring-2 ring-clay/40 transition hover:bg-clay hover:scale-[1.02]"
-          >
-            <span>🕯️</span>
-            <span>
-              Added <b>{toast.name}</b> to bag!
-            </span>
-            <span className="ml-1 text-gold underline font-semibold">View Bag →</span>
-          </Link>
-        </div>
-      )}
     </header>
   );
 }
