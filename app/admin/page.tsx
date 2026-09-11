@@ -57,6 +57,30 @@ export default function Admin() {
   const [selectedScreenshotOrder, setSelectedScreenshotOrder] = useState<Order | null>(null);
   const [uploadedPhotos, setUploadedPhotos] = useState<string[]>([]);
   const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
+  const [isLiveConnected, setIsLiveConnected] = useState(false);
+  const [newOrderAlert, setNewOrderAlert] = useState<Order | null>(null);
+
+  function playOrderChime() {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = "sine";
+      const now = ctx.currentTime;
+      osc.frequency.setValueAtTime(587.33, now); // D5
+      osc.frequency.setValueAtTime(880, now + 0.14); // A5
+      gain.gain.setValueAtTime(0.25, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.65);
+      osc.start(now);
+      osc.stop(now + 0.65);
+    } catch {
+      // Audio autoplay policy fallback
+    }
+  }
 
   function getScreenshotExpiryInfo(createdAt: string, expiresAt?: string) {
     const createdTime = new Date(createdAt).getTime();
@@ -177,6 +201,71 @@ export default function Admin() {
 
   useEffect(() => {
     load();
+
+    // Live order stream via Server-Sent Events (SSE)
+    let eventSource: EventSource | null = null;
+    try {
+      eventSource = new EventSource("/api/orders/live");
+      eventSource.onopen = () => {
+        setIsLiveConnected(true);
+      };
+      eventSource.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (data.type === "NEW_ORDER" && data.order) {
+            setOrders((prev) => {
+              if (prev.some((o) => o.id === data.order.id)) return prev;
+              return [data.order, ...prev];
+            });
+            setNewOrderAlert(data.order);
+            playOrderChime();
+          } else if (data.type === "STATUS_UPDATED") {
+            setOrders((prev) =>
+              prev.map((o) => (o.id === data.id ? { ...o, status: data.status } : o))
+            );
+          } else if (data.type === "SCREENSHOT_DELETED") {
+            setOrders((prev) =>
+              prev.map((o) =>
+                o.id === data.id
+                  ? { ...o, screenshot: undefined, screenshotExpired: true }
+                  : o
+              )
+            );
+          }
+        } catch {}
+      };
+      eventSource.onerror = () => {
+        setIsLiveConnected(false);
+      };
+    } catch {
+      setIsLiveConnected(false);
+    }
+
+    // Auto-polling heartbeat every 8 seconds to ensure customer orders always reach studio
+    const pollInterval = setInterval(() => {
+      fetch("/api/admin/orders")
+        .then((r) => r.json())
+        .then((freshOrders) => {
+          if (Array.isArray(freshOrders)) {
+            setOrders((prev) => {
+              if (freshOrders.length > prev.length && prev.length > 0) {
+                const newest = freshOrders[0];
+                if (!prev.some((o) => o.id === newest.id)) {
+                  playOrderChime();
+                  setNewOrderAlert(newest);
+                }
+              }
+              return freshOrders;
+            });
+          }
+        })
+        .catch(() => {});
+    }, 8000);
+
+    return () => {
+      if (eventSource) eventSource.close();
+      clearInterval(pollInterval);
+    };
   }, []);
 
   async function status(id: string, status: OrderStatus) {
@@ -335,16 +424,65 @@ export default function Admin() {
 
   return (
     <main className="min-h-screen bg-[#f8f0e3]">
-      <header className="border-b bg-[#fff8ed]">
+      <header className="border-b bg-[#fff8ed] sticky top-0 z-30 shadow-xs">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4">
           <Link href="/" className="display text-2xl">
             candlemate<span className="text-gold">.</span>
           </Link>
-          <span className="rounded-full bg-[#e9d5b8] px-3 py-1 text-xs">Studio dashboard</span>
+          <div className="flex items-center gap-3">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800 border border-emerald-200 shadow-xs">
+              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+              {isLiveConnected ? "Studio Live Stream Connected" : "Studio Auto-Sync Active"}
+            </span>
+            <span className="rounded-full bg-[#e9d5b8] px-3 py-1 text-xs font-medium text-[#765442]">
+              Studio dashboard
+            </span>
+          </div>
         </div>
       </header>
 
       <div className="mx-auto max-w-7xl px-5 py-9">
+        {/* Real-time New Order Received Banner */}
+        {newOrderAlert && (
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-gradient-to-r from-[#ffeacc] via-[#fedbb3] to-[#ffe5c4] p-4 border-2 border-[#e5832d] shadow-lg animate-pulse">
+            <div className="flex items-center gap-3">
+              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-ink text-2xl text-white shadow-sm">
+                🕯️
+              </span>
+              <div>
+                <p className="text-sm font-bold text-ink flex items-center gap-2">
+                  <span>New Customer Order Received!</span>
+                  <span className="rounded-full bg-clay text-white text-[11px] px-2 py-0.5 font-semibold">
+                    {newOrderAlert.id}
+                  </span>
+                  <span className="text-xs font-bold text-clay">₹{newOrderAlert.total}</span>
+                </p>
+                <p className="text-xs text-[#765442] mt-0.5">
+                  Customer: <b>{newOrderAlert.customer.name}</b> ({newOrderAlert.customer.phone}) · {newOrderAlert.customer.address}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {newOrderAlert.screenshot && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedScreenshotOrder(newOrderAlert)}
+                  className="rounded-xl bg-ink px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-clay transition shadow-sm cursor-pointer"
+                >
+                  View Payment Proof
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setNewOrderAlert(null)}
+                className="rounded-xl border border-[#8a61483a] bg-white px-3 py-1.5 text-xs font-medium text-[#765442] hover:bg-stone-100 transition cursor-pointer"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
+
         {notice && <p className="mb-5 rounded-xl bg-[#e5eedc] p-3 text-sm text-moss">{notice}</p>}
         <h1 className="display text-5xl">Good morning, maker.</h1>
         <p className="mt-2 text-[#765442]">Orders, products and payment details in one calm place.</p>
