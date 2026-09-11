@@ -1,3 +1,88 @@
 "use client";
-import {Header} from "@/components/header";import {useCart} from "@/components/cart-context";import {Candle} from "@/components/candle";import Link from "next/link";
-export default function Cart(){const {items,total,update,remove}=useCart();return <><Header/><main className="relative mx-auto min-h-[70vh] max-w-5xl overflow-hidden px-5 py-12"><div className="pointer-events-none absolute -right-5 bottom-0 opacity-20 sm:opacity-35"><Candle stage={items.length?"filled":"empty"}/></div><h1 className="display text-5xl">Your candle bag</h1>{!items.length?<div className="mt-10 paper max-w-lg rounded-3xl p-8"><p className="text-[#765442]">Your bag is waiting for a little glow.</p><Link href="/" className="mt-5 inline-block rounded-full bg-ink px-5 py-3 text-sm text-white">Browse candles</Link></div>:<div className="mt-8 grid gap-8 md:grid-cols-[1fr_300px]"><div className="space-y-4">{items.map(item=><div key={item.id} className="paper flex gap-4 rounded-2xl p-4"><img className="h-24 w-20 rounded-xl object-cover" src={item.images[0]} alt=""/><div className="flex-1"><div className="flex justify-between gap-2"><h2 className="display text-xl">{item.name}</h2><b>₹{item.price*item.quantity}</b></div><div className="mt-4 flex items-center gap-3 text-sm"><button className="rounded-full border px-2" onClick={()=>update(item.id,item.quantity-1)}>−</button><span>{item.quantity}</span><button className="rounded-full border px-2" onClick={()=>update(item.id,item.quantity+1)}>+</button><button className="ml-auto text-[#9e4d39]" onClick={()=>remove(item.id)}>Remove</button></div></div></div>)}</div><aside className="paper h-fit rounded-3xl p-6"><p className="text-sm text-[#765442]">Subtotal</p><p className="display mt-1 text-4xl">₹{total}</p><p className="mt-2 text-xs text-[#765442]">Shipping is confirmed with your order.</p><Link href="/checkout" className="mt-6 block rounded-full bg-ink px-5 py-3 text-center text-sm text-white">Continue to checkout</Link></aside></div>}</main></>}
+
+import { Header } from "@/components/header";
+import { useCart } from "@/components/cart-context";
+import { Candle } from "@/components/candle";
+import Link from "next/link";
+
+export default function Cart() {
+  const { items, total, update, remove } = useCart();
+
+  return (
+    <>
+      <Header />
+      <main className="relative mx-auto min-h-[70vh] max-w-5xl overflow-hidden px-5 py-12">
+        {/* Realistic Animated Crafting Candle */}
+        <div className="pointer-events-none absolute right-2 bottom-4 sm:right-6 sm:bottom-8 opacity-75 sm:opacity-90 transition-opacity">
+          <Candle stage={items.length ? "filled" : "empty"} />
+        </div>
+
+        <h1 className="display text-4xl sm:text-5xl text-ink">Your candle bag</h1>
+
+        {!items.length ? (
+          <div className="mt-10 paper max-w-lg rounded-3xl p-8 shadow-sm">
+            <p className="text-[#765442]">Your bag is waiting for a little glow.</p>
+            <Link
+              href="/"
+              className="mt-5 inline-block rounded-full bg-ink px-6 py-3 text-sm text-white hover:bg-clay transition"
+            >
+              Browse candles
+            </Link>
+          </div>
+        ) : (
+          <div className="mt-8 grid gap-8 md:grid-cols-[1fr_300px]">
+            <div className="space-y-4">
+              {items.map((item) => (
+                <div key={item.id} className="paper flex gap-4 rounded-2xl p-4 shadow-sm">
+                  <img
+                    className="h-24 w-20 rounded-xl object-cover border border-[#8a61481a]"
+                    src={item.images[0]}
+                    alt=""
+                  />
+                  <div className="flex-1">
+                    <div className="flex justify-between gap-2">
+                      <h2 className="display text-xl text-ink">{item.name}</h2>
+                      <b className="text-clay">₹{item.price * item.quantity}</b>
+                    </div>
+                    <div className="mt-4 flex items-center gap-3 text-sm">
+                      <button
+                        className="rounded-full border border-[#8a61483a] px-2.5 py-0.5 hover:bg-clay hover:text-white transition"
+                        onClick={() => update(item.id, item.quantity - 1)}
+                      >
+                        −
+                      </button>
+                      <span className="font-medium text-ink">{item.quantity}</span>
+                      <button
+                        className="rounded-full border border-[#8a61483a] px-2.5 py-0.5 hover:bg-clay hover:text-white transition"
+                        onClick={() => update(item.id, item.quantity + 1)}
+                      >
+                        +
+                      </button>
+                      <button
+                        className="ml-auto text-xs text-[#9e4d39] hover:underline"
+                        onClick={() => remove(item.id)}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <aside className="paper h-fit rounded-3xl p-6 shadow-sm">
+              <p className="text-sm text-[#765442]">Subtotal</p>
+              <p className="display mt-1 text-4xl text-ink">₹{total}</p>
+              <p className="mt-2 text-xs text-[#765442]">Shipping is confirmed with your order.</p>
+              <Link
+                href="/checkout"
+                className="mt-6 block rounded-full bg-ink px-5 py-3 text-center text-sm text-white hover:bg-clay transition"
+              >
+                Continue to checkout
+              </Link>
+            </aside>
+          </div>
+        )}
+      </main>
+    </>
+  );
+}
