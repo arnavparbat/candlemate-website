@@ -158,9 +158,13 @@ export default function Checkout() {
       }
       setOrder(data);
 
-      // Instantaneous Broadcast to active Studio dashboard tabs (0ms latency)
+      // Instantaneous Broadcast & Local Persistence for Studio (0ms latency)
       if (typeof window !== "undefined") {
         try {
+          const stored = JSON.parse(localStorage.getItem("candlemate_orders") || "[]");
+          if (!stored.some((o: any) => o.id === data.id)) {
+            localStorage.setItem("candlemate_orders", JSON.stringify([data, ...stored]));
+          }
           if ("BroadcastChannel" in window) {
             const bc = new BroadcastChannel("candlemate_orders_stream");
             bc.postMessage({ type: "NEW_ORDER", order: data });

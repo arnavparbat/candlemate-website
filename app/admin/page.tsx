@@ -190,13 +190,33 @@ export default function Admin() {
 
   async function load() {
     const [o, p, s] = await Promise.all([
-      fetch("/api/admin/orders").then((r) => r.json()),
+      fetch(`/api/admin/orders?_t=${Date.now()}`, { cache: "no-store" })
+        .then((r) => r.json())
+        .catch(() => []),
       fetch("/api/products").then((r) => r.json()),
       fetch(`/api/settings/payment?_t=${Date.now()}`, { cache: "no-store" })
         .then((r) => r.json())
         .catch(() => ({ upiId: "" })),
     ]);
-    setOrders(o);
+
+    // Merge server orders and any client-saved orders so orders are never lost
+    const localOrders: Order[] =
+      typeof window !== "undefined"
+        ? JSON.parse(localStorage.getItem("candlemate_orders") || "[]")
+        : [];
+    const serverOrders: Order[] = Array.isArray(o) ? o : [];
+
+    const orderMap = new Map<string, Order>();
+    for (const order of [...localOrders, ...serverOrders]) {
+      if (order && order.id) {
+        orderMap.set(order.id, order);
+      }
+    }
+    const merged = Array.from(orderMap.values()).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+
+    setOrders(merged);
     setProducts(p);
     const activeUpi =
       (typeof window !== "undefined" && localStorage.getItem("candlemate_upi_id")) ||
@@ -214,6 +234,12 @@ export default function Admin() {
         if (prev.some((o) => o.id === incoming.id)) return prev;
         playOrderChime();
         setNewOrderAlert(incoming);
+        try {
+          const stored = JSON.parse(localStorage.getItem("candlemate_orders") || "[]");
+          if (!stored.some((o: any) => o.id === incoming.id)) {
+            localStorage.setItem("candlemate_orders", JSON.stringify([incoming, ...stored]));
+          }
+        } catch {}
         return [incoming, ...prev];
       });
     };
@@ -288,14 +314,28 @@ export default function Admin() {
         .then((freshOrders) => {
           if (Array.isArray(freshOrders)) {
             setOrders((prev) => {
-              if (freshOrders.length > prev.length && prev.length > 0) {
-                const newest = freshOrders[0];
-                if (!prev.some((o) => o.id === newest.id)) {
-                  playOrderChime();
-                  setNewOrderAlert(newest);
+              const prevMap = new Map(prev.map((o) => [o.id, o]));
+              let hasNew = false;
+              let newestOrder: Order | null = null;
+              for (const fo of freshOrders) {
+                if (fo && fo.id && !prevMap.has(fo.id)) {
+                  prevMap.set(fo.id, fo);
+                  hasNew = true;
+                  newestOrder = fo;
                 }
               }
-              return freshOrders;
+              if (hasNew && newestOrder) {
+                playOrderChime();
+                setNewOrderAlert(newestOrder);
+                try {
+                  const stored = JSON.parse(localStorage.getItem("candlemate_orders") || "[]");
+                  const merged = Array.from(prevMap.values());
+                  localStorage.setItem("candlemate_orders", JSON.stringify(merged));
+                } catch {}
+              }
+              return Array.from(prevMap.values()).sort(
+                (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+              );
             });
           }
         })
