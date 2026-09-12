@@ -4,7 +4,7 @@ import { Header } from "@/components/header";
 import { useCart } from "@/components/cart-context";
 import { Candle, CandleStage } from "@/components/candle";
 import { QRCodeSVG } from "qrcode.react";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useState, useRef } from "react";
 import { uploadScreenshotToSupabase, isSupabaseConfigured } from "@/lib/supabase";
 import Link from "next/link";
 
@@ -32,6 +32,7 @@ export default function Checkout() {
   const [appLaunched, setAppLaunched] = useState(false);
   const [copiedUpi, setCopiedUpi] = useState(false);
   const [isIos, setIsIos] = useState(false);
+  const hasAutoRedirected = useRef(false);
 
   useEffect(() => {
     fetch("/api/settings/payment")
@@ -267,6 +268,24 @@ export default function Checkout() {
   const whatsappUrl = `https://api.whatsapp.com/send?phone=${studioWhatsappNumber}&text=${encodeURIComponent(
     whatsappMessage
   )}`;
+
+  // Automatically open WhatsApp directly when order is completed
+  useEffect(() => {
+    if (phase === "done" && whatsappUrl && !hasAutoRedirected.current) {
+      hasAutoRedirected.current = true;
+      const timer = setTimeout(() => {
+        try {
+          const win = window.open(whatsappUrl, "_blank");
+          if (!win || win.closed || typeof win.closed === "undefined") {
+            window.location.href = whatsappUrl;
+          }
+        } catch {
+          window.location.href = whatsappUrl;
+        }
+      }, 700);
+      return () => clearTimeout(timer);
+    }
+  }, [phase, whatsappUrl]);
 
   return (
     <>
@@ -665,8 +684,8 @@ export default function Checkout() {
                 </svg>
                 <span>Send Order Receipt to Studio WhatsApp ↗</span>
               </a>
-              <p className="mt-2 text-xs text-[#765442] text-center font-medium">
-                Opens chat directly with <b>+91 9552682389</b> — just tap the send button!
+              <p className="mt-2.5 text-xs text-[#765442] text-center font-medium">
+                Opening WhatsApp automatically… If it didn’t open, tap the green button above to message <b>+91 9552682389</b>!
               </p>
             </div>
 
