@@ -13,7 +13,7 @@ type Phase = "details" | "pay" | "burning" | "done";
 export default function Checkout() {
   const { items, total, clear } = useCart();
   const [phase, setPhase] = useState<Phase>("details");
-  const [upi, setUpi] = useState("candlemate@upi");
+  const [upi, setUpi] = useState("9552682389@ybl");
   const [form, setForm] = useState({ name: "", address: "", phone: "" });
   const [error, setError] = useState("");
   const [shot, setShot] = useState("");
@@ -30,8 +30,12 @@ export default function Checkout() {
   // UPI Pop-up and Payment States
   const [showUpiModal, setShowUpiModal] = useState(false);
   const [appLaunched, setAppLaunched] = useState(false);
+  const [selectedApp, setSelectedApp] = useState<string>("generic");
   const [copiedUpi, setCopiedUpi] = useState(false);
+  const [copiedPhone, setCopiedPhone] = useState(false);
   const [isIos, setIsIos] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  const [modalShowQr, setModalShowQr] = useState(false);
   const hasAutoRedirected = useRef(false);
 
   useEffect(() => {
@@ -43,13 +47,17 @@ export default function Checkout() {
       .catch(() => {});
 
     if (typeof navigator !== "undefined") {
-      setIsIos(/iPad|iPhone|iPod/.test(navigator.userAgent));
+      const ua = navigator.userAgent || "";
+      setIsIos(/iPad|iPhone|iPod/.test(ua));
+      setIsMobile(/Android|iPhone|iPad|iPod|Mobile/i.test(ua));
     }
   }, []);
 
-  const paymentUri = `upi://pay?pa=${encodeURIComponent(upi)}&pn=Candlemate&am=${total}&cu=INR&tn=${encodeURIComponent(
-    "Candlemate Order"
-  )}`;
+  // NPCI standard requires 2 decimal places for UPI amount parameter (e.g. 529.00)
+  const formattedAmount = Number(total).toFixed(2);
+  const paymentUri = `upi://pay?pa=${encodeURIComponent(upi)}&pn=${encodeURIComponent(
+    "Candlemate"
+  )}&am=${encodeURIComponent(formattedAmount)}&cu=INR&tn=${encodeURIComponent("Candlemate Order")}`;
 
   const candleStage: CandleStage =
     phase === "details"
@@ -69,13 +77,16 @@ export default function Checkout() {
     setError("");
     setPhase("pay");
     setAppLaunched(false);
-    setShowUpiModal(true);
+    // Open the UPI app launcher modal automatically on mobile devices
+    if (typeof navigator !== "undefined" && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)) {
+      setShowUpiModal(true);
+    }
   }
 
   function getUpiAppUri(app: "gpay" | "phonepe" | "paytm" | "bhim" | "generic") {
     const params = `pa=${encodeURIComponent(upi)}&pn=${encodeURIComponent(
       "Candlemate"
-    )}&am=${encodeURIComponent(total)}&cu=INR&tn=${encodeURIComponent("Candlemate Order")}`;
+    )}&am=${encodeURIComponent(formattedAmount)}&cu=INR&tn=${encodeURIComponent("Candlemate Order")}`;
 
     if (typeof navigator === "undefined") {
       return `upi://pay?${params}`;
@@ -85,23 +96,19 @@ export default function Checkout() {
     const isIosDevice = /iPad|iPhone|iPod/.test(ua);
     const isAndroidDevice = /Android/.test(ua);
 
-    // iOS handles registered custom URL schemes directly without delegating upi:// to WhatsApp
+    // iOS URL scheme routing
     if (isIosDevice) {
       switch (app) {
-        case "gpay":
-          return `gpay://upi/pay?${params}`;
         case "phonepe":
           return `phonepe://pay?${params}`;
         case "paytm":
           return `paytmmp://pay?${params}`;
-        case "bhim":
-          return `bhim://pay?${params}`;
         default:
           return `upi://pay?${params}`;
       }
     }
 
-    // Android Chrome can direct-intent to specific apps to bypass app chooser
+    // Android Chrome package intents
     if (isAndroidDevice) {
       switch (app) {
         case "gpay":
@@ -122,7 +129,15 @@ export default function Checkout() {
 
   function openUpiApp(app: "gpay" | "phonepe" | "paytm" | "bhim" | "generic") {
     const uri = getUpiAppUri(app);
+    setSelectedApp(app);
     setAppLaunched(true);
+
+    // Pre-copy the studio UPI ID to clipboard as a background helper
+    // so if the user's banking app blocks the web intent, they can paste it in 1 tap
+    if (navigator?.clipboard) {
+      navigator.clipboard.writeText(upi).catch(() => {});
+    }
+
     window.location.href = uri;
   }
 
@@ -130,7 +145,16 @@ export default function Checkout() {
     if (navigator?.clipboard) {
       navigator.clipboard.writeText(upi).then(() => {
         setCopiedUpi(true);
-        setTimeout(() => setCopiedUpi(false), 2200);
+        setTimeout(() => setCopiedUpi(false), 2500);
+      });
+    }
+  }
+
+  function copyPhone() {
+    if (navigator?.clipboard) {
+      navigator.clipboard.writeText("9552682389").then(() => {
+        setCopiedPhone(true);
+        setTimeout(() => setCopiedPhone(false), 2500);
       });
     }
   }
@@ -514,6 +538,17 @@ export default function Checkout() {
                           {copiedUpi ? "Copied! ✓" : "Copy"}
                         </button>
                       </div>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                        <span className="text-xs text-[#765442]">Studio Mobile:</span>
+                        <b className="text-ink text-xs">+91 9552682389</b>
+                        <button
+                          type="button"
+                          onClick={copyPhone}
+                          className="rounded-lg bg-[#f5ebe0] px-2 py-0.5 text-[11px] font-semibold text-[#765442] hover:bg-clay hover:text-white transition cursor-pointer"
+                        >
+                          {copiedPhone ? "Copied! ✓" : "Copy Number"}
+                        </button>
+                      </div>
                       <button
                         type="button"
                         onClick={() => setPhase("details")}
@@ -774,18 +809,85 @@ export default function Checkout() {
             {appLaunched ? (
               <div className="mt-5 rounded-2xl bg-[#fff8ed] border border-[#8a614825] p-5 text-center">
                 <div className="mx-auto w-12 h-12 rounded-full bg-[#f5ebe0] flex items-center justify-center text-2xl mb-2.5 shadow-xs">
-                  📸
+                  ⚡
                 </div>
                 <h4 className="text-sm font-bold text-ink uppercase tracking-wide">
-                  Payment App Opened
+                  Payment App Triggered ({selectedApp === "gpay" ? "Google Pay" : selectedApp === "phonepe" ? "PhonePe" : selectedApp === "paytm" ? "Paytm" : selectedApp === "bhim" ? "BHIM" : "UPI App"})
                 </h4>
-                <p className="mt-1.5 text-xs text-[#765442] leading-relaxed">
-                  Once your payment of <b className="text-ink">₹{total}</b> is done:
+                <p className="mt-1 text-xs text-[#765442]">
+                  Paying <b className="text-ink">₹{total}</b> to Candlemate Studio
                 </p>
-                <div className="mt-3 text-left space-y-1 text-xs text-ink/80 bg-white/80 rounded-xl p-3 border border-[#8a614815]">
-                  <p>1. Take a screenshot of the payment receipt.</p>
-                  <p>2. Tap below to upload it and finalize your order.</p>
+
+                {/* CRITICAL HELPER: IF BANK BLOCKS BROWSER INTENT */}
+                <div className="mt-3.5 text-left rounded-xl border-2 border-amber-300 bg-amber-50/95 p-3 shadow-xs">
+                  <div className="flex items-start gap-2">
+                    <span className="text-base select-none">⚠️</span>
+                    <div>
+                      <p className="text-[11px] font-bold text-amber-950 uppercase tracking-wide">
+                        Did your app say &quot;Payment not allowed&quot; or &quot;Security error&quot;?
+                      </p>
+                      <p className="mt-1 text-xs leading-relaxed text-amber-900 font-medium">
+                        Certain banks (and Google Pay / PhonePe) restrict website links to personal UPI accounts. <b>Don&apos;t worry!</b> Your Studio UPI ID is already copied.
+                      </p>
+                      <p className="mt-1.5 text-xs text-amber-950 font-bold">
+                        👉 Open your app &gt; Tap &quot;Pay UPI ID / Number&quot; &gt; Paste <span className="underline">{upi}</span> or enter <span className="underline">9552682389</span>.
+                      </p>
+                    </div>
+                  </div>
                 </div>
+
+                {/* Quick Copy Action Box */}
+                <div className="mt-3 space-y-2">
+                  <div className="flex items-center justify-between rounded-xl bg-white px-3 py-2 border border-[#8a614820]">
+                    <div className="text-left min-w-0 pr-2">
+                      <span className="text-[10px] uppercase font-bold text-[#765442]/70 block">Studio UPI ID</span>
+                      <span className="text-xs font-bold text-ink truncate block">{upi}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={copyUpiId}
+                      className="shrink-0 rounded-lg bg-clay px-3 py-1 text-xs font-semibold text-white hover:bg-ink transition shadow-xs cursor-pointer"
+                    >
+                      {copiedUpi ? "Copied! ✓" : "Copy ID"}
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-between rounded-xl bg-white px-3 py-2 border border-[#8a614820]">
+                    <div className="text-left min-w-0 pr-2">
+                      <span className="text-[10px] uppercase font-bold text-[#765442]/70 block">Studio Mobile (GPay/PhonePe)</span>
+                      <span className="text-xs font-bold text-ink truncate block">+91 9552682389</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={copyPhone}
+                      className="shrink-0 rounded-lg bg-[#f5ebe0] px-3 py-1 text-xs font-semibold text-[#765442] hover:bg-clay hover:text-white transition shadow-xs cursor-pointer"
+                    >
+                      {copiedPhone ? "Copied! ✓" : "Copy Phone"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* In-Modal Dynamic QR Code Drawer */}
+                <button
+                  type="button"
+                  onClick={() => setModalShowQr(!modalShowQr)}
+                  className="mt-3 w-full py-2 text-xs font-semibold text-clay bg-white rounded-xl border border-clay/30 hover:bg-[#fffaf3] transition flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <span>📷</span>
+                  <span>{modalShowQr ? "Hide QR Code ▲" : "Or Scan QR Code / Scan from Gallery ▼"}</span>
+                </button>
+
+                {modalShowQr && (
+                  <div className="mt-2 p-3 bg-white rounded-2xl border border-[#8a614820] flex flex-col items-center animate-in fade-in">
+                    <QRCodeSVG value={paymentUri} size={140} />
+                    <p className="mt-2 text-xs font-bold text-ink">Scan to pay ₹{total}</p>
+                    <p className="text-[11px] text-[#765442] mt-0.5">
+                      Tip: Take a screenshot and use &quot;Scan from photo/gallery&quot; in GPay or PhonePe!
+                    </p>
+                  </div>
+                )}
+
+                {/* Proceed to Upload Screenshot */}
                 <button
                   type="button"
                   onClick={() => {
@@ -795,26 +897,71 @@ export default function Checkout() {
                   }}
                   className="mt-4 w-full rounded-full bg-ink py-3 text-xs font-bold text-white hover:bg-clay transition shadow-sm cursor-pointer"
                 >
-                  📸 Upload Payment Screenshot Now →
+                  📸 I&apos;ve Paid — Upload Screenshot Now →
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setAppLaunched(false)}
-                  className="mt-2.5 text-[11px] text-clay underline hover:text-ink cursor-pointer block w-full"
-                >
-                  ← Choose a different payment app
-                </button>
+
+                <div className="mt-2.5 flex items-center justify-center gap-3 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => openUpiApp("generic")}
+                    className="text-clay underline hover:text-ink cursor-pointer"
+                  >
+                    ⚡ Try Any Other UPI App
+                  </button>
+                  <span className="text-[#8a614840]">·</span>
+                  <button
+                    type="button"
+                    onClick={() => setAppLaunched(false)}
+                    className="text-clay underline hover:text-ink cursor-pointer"
+                  >
+                    ← Back to app list
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="mt-4 space-y-2.5">
-                {/* 1. Google Pay */}
+                {/* 1. Primary Universal Launcher: Opens native system app chooser */}
+                <button
+                  type="button"
+                  onClick={() => openUpiApp("generic")}
+                  className="w-full rounded-2xl bg-gradient-to-r from-clay to-[#6e4630] p-4 text-white hover:opacity-95 transition shadow-md flex items-center justify-between cursor-pointer"
+                >
+                  <div className="flex items-center gap-3 text-left">
+                    <div className="h-10 w-10 rounded-xl bg-white/20 flex items-center justify-center text-xl shadow-xs">
+                      ⚡
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-bold text-white">Pay via Any UPI App</p>
+                        <span className="rounded-full bg-white/25 px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider text-white">
+                          Recommended
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-white/85 mt-0.5">
+                        Native chooser (GPay, PhonePe, Paytm, Cred, BHIM)
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-xs font-bold bg-white/20 rounded-xl px-2.5 py-1 shrink-0">
+                    Pay ₹{total} →
+                  </span>
+                </button>
+
+                <div className="relative py-1 flex items-center justify-center">
+                  <div className="border-t border-[#8a614820] w-full" />
+                  <span className="bg-[#fffdf9] px-2 text-[10px] uppercase font-bold text-[#765442]/60 tracking-wider">
+                    Or select specific app
+                  </span>
+                </div>
+
+                {/* 2. Google Pay */}
                 <button
                   type="button"
                   onClick={() => openUpiApp("gpay")}
-                  className="w-full flex items-center justify-between rounded-2xl border border-[#8a614820] bg-white p-3.5 hover:border-clay hover:shadow-md transition group cursor-pointer"
+                  className="w-full flex items-center justify-between rounded-2xl border border-[#8a614820] bg-white p-3 hover:border-clay hover:shadow-md transition group cursor-pointer"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-xl bg-white border border-gray-100 flex items-center justify-center shadow-xs">
+                    <div className="h-9 w-9 rounded-xl bg-white border border-gray-100 flex items-center justify-center shadow-xs">
                       <svg className="w-5 h-5" viewBox="0 0 24 24">
                         <path
                           fill="#4285F4"
@@ -835,8 +982,8 @@ export default function Checkout() {
                       </svg>
                     </div>
                     <div className="text-left">
-                      <p className="text-sm font-bold text-ink group-hover:text-clay">Google Pay</p>
-                      <p className="text-[11px] text-[#765442]">Pay ₹{total} directly via GPay</p>
+                      <p className="text-xs font-bold text-ink group-hover:text-clay">Google Pay</p>
+                      <p className="text-[11px] text-[#765442]">Pay ₹{total} via Google Pay</p>
                     </div>
                   </div>
                   <span className="text-xs font-semibold text-clay group-hover:translate-x-0.5 transition-transform">
@@ -844,19 +991,19 @@ export default function Checkout() {
                   </span>
                 </button>
 
-                {/* 2. PhonePe */}
+                {/* 3. PhonePe */}
                 <button
                   type="button"
                   onClick={() => openUpiApp("phonepe")}
-                  className="w-full flex items-center justify-between rounded-2xl border border-[#8a614820] bg-white p-3.5 hover:border-clay hover:shadow-md transition group cursor-pointer"
+                  className="w-full flex items-center justify-between rounded-2xl border border-[#8a614820] bg-white p-3 hover:border-clay hover:shadow-md transition group cursor-pointer"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-xl bg-[#5f259f] flex items-center justify-center text-white font-bold text-base shadow-xs">
+                    <div className="h-9 w-9 rounded-xl bg-[#5f259f] flex items-center justify-center text-white font-bold text-sm shadow-xs">
                       पे
                     </div>
                     <div className="text-left">
-                      <p className="text-sm font-bold text-ink group-hover:text-clay">PhonePe</p>
-                      <p className="text-[11px] text-[#765442]">Pay ₹{total} directly via PhonePe</p>
+                      <p className="text-xs font-bold text-ink group-hover:text-clay">PhonePe</p>
+                      <p className="text-[11px] text-[#765442]">Pay ₹{total} via PhonePe</p>
                     </div>
                   </div>
                   <span className="text-xs font-semibold text-clay group-hover:translate-x-0.5 transition-transform">
@@ -864,19 +1011,19 @@ export default function Checkout() {
                   </span>
                 </button>
 
-                {/* 3. Paytm */}
+                {/* 4. Paytm */}
                 <button
                   type="button"
                   onClick={() => openUpiApp("paytm")}
-                  className="w-full flex items-center justify-between rounded-2xl border border-[#8a614820] bg-white p-3.5 hover:border-clay hover:shadow-md transition group cursor-pointer"
+                  className="w-full flex items-center justify-between rounded-2xl border border-[#8a614820] bg-white p-3 hover:border-clay hover:shadow-md transition group cursor-pointer"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-xl bg-[#002970] flex items-center justify-center text-[#00b9f5] font-extrabold text-[11px] tracking-tight shadow-xs">
+                    <div className="h-9 w-9 rounded-xl bg-[#002970] flex items-center justify-center text-[#00b9f5] font-extrabold text-[10px] tracking-tight shadow-xs">
                       Paytm
                     </div>
                     <div className="text-left">
-                      <p className="text-sm font-bold text-ink group-hover:text-clay">Paytm</p>
-                      <p className="text-[11px] text-[#765442]">Pay ₹{total} directly via Paytm</p>
+                      <p className="text-xs font-bold text-ink group-hover:text-clay">Paytm</p>
+                      <p className="text-[11px] text-[#765442]">Pay ₹{total} via Paytm</p>
                     </div>
                   </div>
                   <span className="text-xs font-semibold text-clay group-hover:translate-x-0.5 transition-transform">
@@ -884,54 +1031,72 @@ export default function Checkout() {
                   </span>
                 </button>
 
-                {/* 4. BHIM / Other UPI */}
+                {/* 5. BHIM / Other UPI */}
                 <button
                   type="button"
-                  onClick={() => openUpiApp(isIos ? "gpay" : "generic")}
-                  className="w-full flex items-center justify-between rounded-2xl border border-[#8a614820] bg-white p-3.5 hover:border-clay hover:shadow-md transition group cursor-pointer"
+                  onClick={() => openUpiApp("bhim")}
+                  className="w-full flex items-center justify-between rounded-2xl border border-[#8a614820] bg-white p-3 hover:border-clay hover:shadow-md transition group cursor-pointer"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[#f37021] to-[#007a3d] flex items-center justify-center text-white font-bold text-xs shadow-xs">
+                    <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-[#f37021] to-[#007a3d] flex items-center justify-center text-white font-bold text-[11px] shadow-xs">
                       UPI
                     </div>
                     <div className="text-left">
-                      <p className="text-sm font-bold text-ink group-hover:text-clay">
-                        {isIos ? "Other UPI / Scan QR" : "BHIM / Any Other UPI"}
-                      </p>
-                      <p className="text-[11px] text-[#765442]">Pay ₹{total} with your preferred UPI app</p>
+                      <p className="text-xs font-bold text-ink group-hover:text-clay">BHIM / Other UPI</p>
+                      <p className="text-[11px] text-[#765442]">Pay with any other UPI app</p>
                     </div>
                   </div>
                   <span className="text-xs font-semibold text-clay group-hover:translate-x-0.5 transition-transform">
                     Pay →
                   </span>
                 </button>
+
+                {/* Copy UPI ID Box & Phone Number */}
+                <div className="pt-1 space-y-2">
+                  <div className="flex items-center justify-between rounded-xl bg-[#f5ebe0]/80 px-3 py-2 border border-[#8a614818]">
+                    <div className="text-left min-w-0 pr-2">
+                      <span className="text-[10px] uppercase font-bold text-[#765442]/70 block">Studio UPI ID</span>
+                      <span className="text-xs font-bold text-ink truncate block">{upi}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={copyUpiId}
+                      className="shrink-0 rounded-lg bg-clay px-3 py-1 text-xs font-semibold text-white hover:bg-ink transition shadow-xs cursor-pointer"
+                    >
+                      {copiedUpi ? "Copied! ✓" : "Copy ID"}
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-between rounded-xl bg-[#f5ebe0]/80 px-3 py-2 border border-[#8a614818]">
+                    <div className="text-left min-w-0 pr-2">
+                      <span className="text-[10px] uppercase font-bold text-[#765442]/70 block">Studio Phone (GPay/PhonePe)</span>
+                      <span className="text-xs font-bold text-ink truncate block">+91 9552682389</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={copyPhone}
+                      className="shrink-0 rounded-lg bg-white px-3 py-1 text-xs font-semibold text-[#765442] hover:bg-clay hover:text-white transition shadow-xs cursor-pointer border border-[#8a614820]"
+                    >
+                      {copiedPhone ? "Copied! ✓" : "Copy Phone"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Dismiss Modal & Show QR Code Option */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowUpiModal(false);
+                    const qrSection = document.getElementById("payment-screenshot-input");
+                    if (qrSection) qrSection.scrollIntoView({ behavior: "smooth" });
+                  }}
+                  className="mt-3 w-full py-2 text-xs font-medium text-[#765442] hover:text-ink transition flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <span>📷</span>
+                  <span>Prefer scanning QR code on screen? Click here</span>
+                </button>
               </div>
             )}
-
-            {/* Copy UPI ID Box */}
-            <div className="mt-4 flex items-center justify-between rounded-xl bg-[#f5ebe0]/70 px-3.5 py-2.5 border border-[#8a614818]">
-              <div className="text-left min-w-0 pr-2">
-                <span className="text-[10px] uppercase font-bold text-[#765442]/70 block">Studio UPI ID</span>
-                <span className="text-xs font-bold text-ink truncate block">{upi}</span>
-              </div>
-              <button
-                type="button"
-                onClick={copyUpiId}
-                className="shrink-0 rounded-lg bg-clay px-3 py-1 text-xs font-semibold text-white hover:bg-ink transition shadow-xs cursor-pointer"
-              >
-                {copiedUpi ? "Copied! ✓" : "Copy ID"}
-              </button>
-            </div>
-
-            {/* Dismiss Modal & Show QR Code Option */}
-            <button
-              type="button"
-              onClick={() => setShowUpiModal(false)}
-              className="mt-4 w-full py-2 text-xs font-medium text-[#765442] hover:text-ink transition flex items-center justify-center gap-1.5 cursor-pointer"
-            >
-              <span>📷</span>
-              <span>Prefer scanning QR code on desktop/another phone? Click here</span>
-            </button>
           </div>
         </div>
       )}

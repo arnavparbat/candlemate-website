@@ -8,7 +8,7 @@ export async function PUT(req: Request) {
     const { upiId } = await req.json();
     const cleanUpi = (upiId || "").trim();
 
-    if (!cleanUpi || !/^[-.a-zA-Z0-9_]+@[a-zA-Z0-9]+$/.test(cleanUpi)) {
+    if (!cleanUpi || !/^[-.a-zA-Z0-9_]+@[a-zA-Z0-9.-]+$/.test(cleanUpi)) {
       return NextResponse.json(
         { error: "Enter a valid UPI ID (e.g. name@bank or 9876543210@upi)" },
         { status: 400 }
