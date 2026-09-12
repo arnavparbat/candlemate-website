@@ -16,8 +16,8 @@ export default function Home() {
         <section className="grain overflow-hidden border-b border-[#5c39271a]">
           <div className="mx-auto grid max-w-6xl items-center gap-3 px-4 py-3 sm:gap-12 sm:px-5 sm:py-14 grid-cols-[1.2fr_.8fr] md:grid-cols-[1.1fr_.9fr]">
             <div>
-              <div className="mb-1.5 sm:mb-4 flex items-center gap-2">
-                <img src="/logo.png" alt="Candlemate Emblem" className="h-5 w-5 sm:h-6 sm:w-6 object-contain opacity-90" />
+              <div className="mb-2 sm:mb-4 flex items-center gap-2">
+                <img src="/logo-emblem.png" alt="Candlemate Emblem" className="h-6 w-auto sm:h-7 object-contain opacity-90" />
                 <p className="text-[10px] sm:text-xs font-bold uppercase tracking-[.2em] text-clay">
                   Hand-poured in small batches
                 </p>
@@ -72,16 +72,13 @@ export default function Home() {
           <img
             src="/logo.png"
             alt="Candlemate Logo"
-            className="h-16 w-16 sm:h-20 sm:w-20 object-contain drop-shadow-xs transition-transform hover:scale-105"
+            className="h-20 w-auto sm:h-24 object-contain drop-shadow-xs transition-transform hover:scale-105"
           />
-          <div className="space-y-1">
-            <p className="display text-xl font-bold text-ink">
-              candlemate<span className="text-gold">.</span>
-            </p>
-            <p className="text-[10px] sm:text-[11px] uppercase tracking-[0.25em] text-clay font-medium">
-              Love · Cherish · Feel
-            </p>
-          </div>
+          <img
+            src="/logo-wordmark.png"
+            alt="Candlemate"
+            className="h-7 sm:h-9 w-auto object-contain mx-auto"
+          />
           <p className="text-xs text-[#765442]/90 max-w-xs leading-relaxed">
             Natural candles designed for evening rituals, unhurried conversations, and calm spaces.
           </p>

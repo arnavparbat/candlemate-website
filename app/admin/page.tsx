@@ -530,15 +530,17 @@ export default function Admin() {
     <main className="min-h-screen bg-[#f8f0e3]">
       <header className="border-b bg-[#fff8ed] sticky top-0 z-30 shadow-xs">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-3 sm:py-4">
-          <Link href="/" className="flex items-center gap-2.5 group">
+          <Link href="/" className="flex items-center gap-2.5 sm:gap-3 group">
             <img
               src="/logo.png"
               alt="Candlemate Logo"
-              className="h-8 w-8 sm:h-9 sm:w-9 object-contain transition-transform group-hover:scale-105"
+              className="h-10 w-auto sm:h-12 object-contain transition-transform group-hover:scale-105"
             />
-            <span className="display text-2xl font-bold tracking-tight text-ink">
-              candlemate<span className="text-gold">.</span>
-            </span>
+            <img
+              src="/logo-wordmark.png"
+              alt="Candlemate"
+              className="h-6 sm:h-7 w-auto object-contain"
+            />
           </Link>
           <div className="flex items-center gap-3">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800 border border-emerald-200 shadow-xs">
