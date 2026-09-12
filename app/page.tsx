@@ -29,12 +29,20 @@ export default function Home() {
               <p className="mt-1 sm:mt-7 max-w-md text-xs sm:text-base sm:leading-7 text-[#765442] hidden xs:block">
                 Natural candles designed for evening rituals, unhurried conversations, and calm spaces.
               </p>
-              <a
-                href="#shop"
-                className="mt-2.5 sm:mt-8 inline-block rounded-full bg-ink px-3.5 py-1.5 sm:px-7 sm:py-3 text-xs sm:text-sm text-cream transition hover:bg-clay"
-              >
-                Find your scent
-              </a>
+              <div className="mt-2.5 sm:mt-8 flex items-center gap-3 flex-wrap">
+                <a
+                  href="#shop"
+                  className="inline-block rounded-full bg-ink px-3.5 py-1.5 sm:px-7 sm:py-3 text-xs sm:text-sm text-cream transition hover:bg-clay"
+                >
+                  Find your scent
+                </a>
+                <Link
+                  href="/track"
+                  className="sm:hidden inline-flex items-center gap-1 text-xs text-clay font-medium underline py-1"
+                >
+                  Track order →
+                </Link>
+              </div>
             </div>
 
             {/* Handcrafted Animated Candle Jar in Hero (Sleek and non-intrusive for mobile) */}

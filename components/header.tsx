@@ -32,8 +32,8 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-[#5c39271a] bg-[#fff8ed]/95 backdrop-blur transition-all">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-3.5 sm:py-4">
-        <Link href="/" className="flex items-center gap-2 sm:gap-3 group">
+      <div className="mx-auto flex max-w-6xl items-center justify-between px-3.5 sm:px-5 py-3 sm:py-4">
+        <Link href="/" className="flex items-center gap-2 sm:gap-3 group shrink-0">
           <img
             src="/logo.png"
             alt="Candlemate Logo"
@@ -46,18 +46,20 @@ export function Header() {
           />
         </Link>
 
-        <nav className="flex items-center gap-2.5 sm:gap-6 text-sm">
+        <nav className="flex items-center gap-2 sm:gap-6 text-sm shrink-0">
           <a href="/#shop" className="hidden md:block hover:text-clay transition font-medium">
             Shop candles
           </a>
 
+          {/* Track order: Sleek icon button on mobile, icon + text on desktop */}
           <Link
             href="/track"
-            className="flex items-center gap-1.5 hover:text-clay text-ink/85 transition font-medium text-xs sm:text-sm px-2.5 py-1.5 rounded-full hover:bg-[#8a614812]"
+            className="flex h-9 w-9 sm:h-auto sm:w-auto items-center justify-center gap-1.5 rounded-full border border-[#8a614825] sm:border-0 hover:bg-[#8a614815] text-ink/85 hover:text-clay transition text-xs sm:text-sm sm:px-2.5 sm:py-1.5 shrink-0"
             title="Track your order status"
+            aria-label="Track order"
           >
             <svg
-              className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-clay shrink-0"
+              className="h-4 w-4 text-clay shrink-0"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -69,7 +71,7 @@ export function Header() {
                 d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
               />
             </svg>
-            <span>Track order</span>
+            <span className="hidden sm:inline font-medium">Track order</span>
           </Link>
 
           {/* Bag button with shake / vibration animation */}
