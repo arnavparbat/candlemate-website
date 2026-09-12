@@ -50,6 +50,13 @@ create policy "Allow studio dashboard order updates"
   using (true)
   with check (true);
 
+-- Allow studio dashboard to delete orders
+create policy "Allow studio dashboard order deletion"
+  on public.orders
+  for delete
+  to anon, authenticated
+  using (true);
+
 -- 4. Create the Storage Bucket for Payment Screenshots (Proof Photos)
 insert into storage.buckets (id, name, public)
 values ('payment-proofs', 'payment-proofs', true)
