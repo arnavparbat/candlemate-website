@@ -33,23 +33,44 @@ export function Header() {
   return (
     <header className="sticky top-0 z-40 border-b border-[#5c39271a] bg-[#fff8ed]/95 backdrop-blur transition-all">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-3.5 sm:py-4">
-        <Link href="/" className="flex items-center gap-2.5 sm:gap-3.5 group">
+        <Link href="/" className="flex items-center gap-2 sm:gap-3 group">
           <img
             src="/logo.png"
             alt="Candlemate Logo"
-            className="h-12 w-auto sm:h-15 max-h-[58px] object-contain transition-transform duration-300 group-hover:scale-105"
+            className="h-11 w-auto sm:h-14 max-h-[56px] object-contain transition-transform duration-300 group-hover:scale-105"
           />
           <img
             src="/logo-wordmark.png"
             alt="Candlemate"
-            className="h-6 sm:h-8 w-auto object-contain transition-opacity duration-300 group-hover:opacity-90"
+            className="h-4 sm:h-5 max-h-5 w-auto object-contain transition-opacity duration-300 group-hover:opacity-90"
           />
         </Link>
 
-        <nav className="flex items-center gap-4 sm:gap-6 text-sm">
-          <a href="/#shop" className="hidden sm:block hover:text-clay transition font-medium">
+        <nav className="flex items-center gap-2.5 sm:gap-6 text-sm">
+          <a href="/#shop" className="hidden md:block hover:text-clay transition font-medium">
             Shop candles
           </a>
+
+          <Link
+            href="/track"
+            className="flex items-center gap-1.5 hover:text-clay text-ink/85 transition font-medium text-xs sm:text-sm px-2.5 py-1.5 rounded-full hover:bg-[#8a614812]"
+            title="Track your order status"
+          >
+            <svg
+              className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-clay shrink-0"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
+              />
+            </svg>
+            <span>Track order</span>
+          </Link>
 
           {/* Bag button with shake / vibration animation */}
           <div className="relative">

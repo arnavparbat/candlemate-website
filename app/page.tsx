@@ -2,6 +2,7 @@ import { Header } from "@/components/header";
 import { ProductCard } from "@/components/product-card";
 import { Candle } from "@/components/candle";
 import { getStore } from "@/lib/store";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
@@ -85,7 +86,9 @@ export default function Home() {
           <div className="pt-3 border-t border-[#5c392715] w-full text-[11px] text-[#765442]/70 flex items-center justify-center gap-2">
             <span>© Candlemate</span>
             <span>·</span>
-            <span>Made for slow moments</span>
+            <Link href="/track" className="underline hover:text-ink transition">
+              track order
+            </Link>
             <span>·</span>
             <a href="/admin" className="underline hover:text-ink transition">
               studio login

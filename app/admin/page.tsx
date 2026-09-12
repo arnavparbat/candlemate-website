@@ -370,6 +370,10 @@ export default function Admin() {
   }, []);
 
   async function status(id: string, newStatus: OrderStatus) {
+    // Optimistic UI update so studio admin sees immediate change
+    setOrders((prev) =>
+      prev.map((o) => (o.id === id ? { ...o, status: newStatus } : o))
+    );
     if (isSupabaseConfigured()) {
       await supabase.from("orders").update({ status: newStatus }).eq("id", id);
     }
@@ -378,6 +382,7 @@ export default function Admin() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: newStatus }),
     });
+    setNotice(`Updated order ${id} to "${newStatus}"`);
     load();
   }
 
@@ -700,15 +705,33 @@ export default function Admin() {
                       )}
                     </td>
                     <td>
-                      <select
-                        value={o.status}
-                        onChange={(e) => status(o.id, e.target.value as OrderStatus)}
-                        className="rounded border bg-white p-1.5 text-xs"
-                      >
-                        {statuses.map((s) => (
-                          <option key={s}>{s}</option>
-                        ))}
-                      </select>
+                      <div className="flex flex-col gap-1 py-1">
+                        <select
+                          value={o.status}
+                          onChange={(e) => status(o.id, e.target.value as OrderStatus)}
+                          className={`rounded-xl border font-semibold p-2 text-xs transition cursor-pointer shadow-2xs ${
+                            o.status === "Delivered"
+                              ? "bg-emerald-50 text-emerald-800 border-emerald-300"
+                              : o.status === "Out for Delivery"
+                              ? "bg-purple-50 text-purple-800 border-purple-300"
+                              : o.status === "Preparing"
+                              ? "bg-amber-50 text-amber-800 border-amber-300"
+                              : "bg-sky-50 text-sky-800 border-sky-300"
+                          }`}
+                        >
+                          {statuses.map((s) => (
+                            <option key={s} value={s}>
+                              {s === "Delivered"
+                                ? "✓ Delivered"
+                                : s === "Out for Delivery"
+                                ? "🚚 Out for Delivery"
+                                : s === "Preparing"
+                                ? "🕯️ Preparing"
+                                : "📋 Order Received"}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </td>
                     <td className="text-xs text-[#765442]">
                       {new Date(o.createdAt).toLocaleDateString()}

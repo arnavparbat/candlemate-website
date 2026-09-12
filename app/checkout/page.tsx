@@ -689,12 +689,24 @@ export default function Checkout() {
               </p>
             </div>
 
-            <Link
-              href="/"
-              className="mt-6 inline-block rounded-full bg-ink px-8 py-3 text-sm font-medium text-cream hover:bg-clay transition"
-            >
-              Browse more candles
-            </Link>
+            <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3 w-full">
+              <Link
+                href={`/track?id=${encodeURIComponent(displayId)}`}
+                className="flex items-center justify-center gap-2 w-full sm:w-auto rounded-full border border-[#8a614830] bg-[#fffaf3] px-6 py-3 text-xs sm:text-sm font-semibold text-clay hover:bg-[#8a614815] transition shadow-2xs"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                </svg>
+                <span>Track Order Live ↗</span>
+              </Link>
+
+              <Link
+                href="/"
+                className="inline-block w-full sm:w-auto text-center rounded-full bg-ink px-6 py-3 text-xs sm:text-sm font-medium text-cream hover:bg-clay transition"
+              >
+                Browse more candles
+              </Link>
+            </div>
           </div>
         )}
       </main>
