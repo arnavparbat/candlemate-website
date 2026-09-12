@@ -19,7 +19,7 @@ export default function Checkout() {
   const [shot, setShot] = useState("");
   const [order, setOrder] = useState<any>(null);
 
-  // Snapshot of order details preserved when cart items are cleared on order placement
+  // Preserved order details snapshot when cart is cleared
   const [placedOrder, setPlacedOrder] = useState<{
     id: string;
     customer: { name: string; address: string; phone: string };
@@ -27,15 +27,11 @@ export default function Checkout() {
     total: number;
   } | null>(null);
 
-  // UPI Pop-up and Payment States
-  const [showUpiModal, setShowUpiModal] = useState(false);
-  const [appLaunched, setAppLaunched] = useState(false);
-  const [selectedApp, setSelectedApp] = useState<string>("generic");
+  // Payment feedback and state
+  const [payHint, setPayHint] = useState<string>("");
+  const [showQrExpanded, setShowQrExpanded] = useState(false);
   const [copiedUpi, setCopiedUpi] = useState(false);
   const [copiedPhone, setCopiedPhone] = useState(false);
-  const [isIos, setIsIos] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
-  const [modalShowQr, setModalShowQr] = useState(false);
   const hasAutoRedirected = useRef(false);
 
   useEffect(() => {
@@ -45,19 +41,13 @@ export default function Checkout() {
         if (x.upiId) setUpi(x.upiId);
       })
       .catch(() => {});
-
-    if (typeof navigator !== "undefined") {
-      const ua = navigator.userAgent || "";
-      setIsIos(/iPad|iPhone|iPod/.test(ua));
-      setIsMobile(/Android|iPhone|iPad|iPod|Mobile/i.test(ua));
-    }
   }, []);
 
-  // NPCI standard requires 2 decimal places for UPI amount parameter (e.g. 529.00)
+  // Standard NPCI formatted UPI URI (2 decimal places, clean payee & note)
   const formattedAmount = Number(total).toFixed(2);
   const paymentUri = `upi://pay?pa=${encodeURIComponent(upi)}&pn=${encodeURIComponent(
     "Candlemate"
-  )}&am=${encodeURIComponent(formattedAmount)}&cu=INR&tn=${encodeURIComponent("Candlemate Order")}`;
+  )}&am=${encodeURIComponent(formattedAmount)}&cu=INR&tn=${encodeURIComponent("Candlemate")}`;
 
   const candleStage: CandleStage =
     phase === "details"
@@ -76,69 +66,32 @@ export default function Checkout() {
     }
     setError("");
     setPhase("pay");
-    setAppLaunched(false);
-    // Open the UPI app launcher modal automatically on mobile devices
-    if (typeof navigator !== "undefined" && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)) {
-      setShowUpiModal(true);
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
     }
   }
 
-  function getUpiAppUri(app: "gpay" | "phonepe" | "paytm" | "bhim" | "generic") {
-    const params = `pa=${encodeURIComponent(upi)}&pn=${encodeURIComponent(
-      "Candlemate"
-    )}&am=${encodeURIComponent(formattedAmount)}&cu=INR&tn=${encodeURIComponent("Candlemate Order")}`;
-
-    if (typeof navigator === "undefined") {
-      return `upi://pay?${params}`;
-    }
-
-    const ua = navigator.userAgent || "";
-    const isIosDevice = /iPad|iPhone|iPod/.test(ua);
-    const isAndroidDevice = /Android/.test(ua);
-
-    // iOS URL scheme routing
-    if (isIosDevice) {
-      switch (app) {
-        case "phonepe":
-          return `phonepe://pay?${params}`;
-        case "paytm":
-          return `paytmmp://pay?${params}`;
-        default:
-          return `upi://pay?${params}`;
-      }
-    }
-
-    // Android Chrome package intents
-    if (isAndroidDevice) {
-      switch (app) {
-        case "gpay":
-          return `intent://pay?${params}#Intent;scheme=upi;package=com.google.android.apps.nbu.paisa.user;end`;
-        case "phonepe":
-          return `intent://pay?${params}#Intent;scheme=upi;package=com.phonepe.app;end`;
-        case "paytm":
-          return `intent://pay?${params}#Intent;scheme=upi;package=net.one97.paytm;end`;
-        case "bhim":
-          return `intent://pay?${params}#Intent;scheme=upi;package=in.org.npci.upiapp;end`;
-        default:
-          return `upi://pay?${params}`;
-      }
-    }
-
-    return `upi://pay?${params}`;
-  }
-
-  function openUpiApp(app: "gpay" | "phonepe" | "paytm" | "bhim" | "generic") {
-    const uri = getUpiAppUri(app);
-    setSelectedApp(app);
-    setAppLaunched(true);
-
-    // Pre-copy the studio UPI ID to clipboard as a background helper
-    // so if the user's banking app blocks the web intent, they can paste it in 1 tap
+  function triggerUpi(appName?: string) {
+    // 1. Copy UPI ID to clipboard as background safety fallback
     if (navigator?.clipboard) {
       navigator.clipboard.writeText(upi).catch(() => {});
     }
+    setCopiedUpi(true);
+    setTimeout(() => setCopiedUpi(false), 3000);
 
-    window.location.href = uri;
+    // 2. Set clear, reassuring fail-safe hint in case bank app restricts web-initiated requests
+    if (appName) {
+      setPayHint(
+        `✓ Studio UPI ID (${upi}) copied! Opening ${appName}... If your bank app restricts website payments, simply select "Pay UPI ID / Mobile" inside ${appName} and paste ${upi} or enter 9552682389 to pay ₹${total}.`
+      );
+    } else {
+      setPayHint(
+        `✓ Studio UPI ID (${upi}) copied! Opening payment app... If your bank app restricts website payments, simply pay ₹${total} to ${upi} or 9552682389.`
+      );
+    }
+
+    // 3. Launch clean standard UPI protocol without package-lock restrictions
+    window.location.href = paymentUri;
   }
 
   function copyUpiId() {
@@ -201,7 +154,6 @@ export default function Checkout() {
     if (f.size > 15_000_000) return setError("Please choose an image smaller than 15 MB.");
     setError("");
     try {
-      // Compress client-side so it uploads fast and uses minimal storage
       const optimized = await fileToOptimizedScreenshot(f);
       setShot(optimized);
     } catch {
@@ -247,7 +199,6 @@ export default function Checkout() {
       return;
     }
 
-    // Save snapshot of order with candle names, quantities, and total so receipt stays complete after clearing cart
     setPlacedOrder({
       id: data.id || "CM-STUDIO",
       customer: orderFormSnapshot,
@@ -293,7 +244,7 @@ export default function Checkout() {
     whatsappMessage
   )}`;
 
-  // Automatically open WhatsApp directly when order is completed
+  // Automatically open WhatsApp when order is finished
   useEffect(() => {
     if (phase === "done" && whatsappUrl && !hasAutoRedirected.current) {
       hasAutoRedirected.current = true;
@@ -314,31 +265,31 @@ export default function Checkout() {
   return (
     <>
       <Header />
-      <main className="mx-auto min-h-[75vh] max-w-5xl px-5 py-8 sm:py-12">
+      <main className="mx-auto min-h-[75vh] max-w-5xl px-4 sm:px-6 py-6 sm:py-10">
         {/* Step Progress Tracker */}
-        <div className="mb-6 flex items-center justify-between border-b border-[#8a61481a] pb-4">
-          <div className="flex items-center gap-2">
+        <div className="mb-6 flex items-center justify-between border-b border-[#8a61481a] pb-3 text-xs">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             <span
-              className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold transition ${
+              className={`flex h-5 w-5 sm:h-6 sm:w-6 items-center justify-center rounded-full text-[11px] font-bold transition ${
                 phase === "details" ? "bg-ink text-white" : "bg-clay text-white"
               }`}
             >
               {phase === "details" ? "1" : "✓"}
             </span>
             <span
-              className={`text-xs font-semibold uppercase tracking-wider transition ${
+              className={`font-semibold uppercase tracking-wider text-[11px] sm:text-xs transition ${
                 phase === "details" ? "text-ink" : "text-clay"
               }`}
             >
-              Delivery Details
+              Details
             </span>
           </div>
 
-          <span className="h-px flex-1 mx-3 bg-[#8a614820] max-w-[50px] sm:max-w-[90px]" />
+          <span className="h-px flex-1 mx-2 sm:mx-3 bg-[#8a614820] max-w-[35px] sm:max-w-[70px]" />
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             <span
-              className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold transition ${
+              className={`flex h-5 w-5 sm:h-6 sm:w-6 items-center justify-center rounded-full text-[11px] font-bold transition ${
                 phase === "pay"
                   ? "bg-ink text-white"
                   : phase === "burning" || phase === "done"
@@ -349,7 +300,7 @@ export default function Checkout() {
               {phase === "burning" || phase === "done" ? "✓" : "2"}
             </span>
             <span
-              className={`text-xs font-semibold uppercase tracking-wider transition ${
+              className={`font-semibold uppercase tracking-wider text-[11px] sm:text-xs transition ${
                 phase === "pay"
                   ? "text-ink"
                   : phase === "burning" || phase === "done"
@@ -361,11 +312,11 @@ export default function Checkout() {
             </span>
           </div>
 
-          <span className="h-px flex-1 mx-3 bg-[#8a614820] max-w-[50px] sm:max-w-[90px]" />
+          <span className="h-px flex-1 mx-2 sm:mx-3 bg-[#8a614820] max-w-[35px] sm:max-w-[70px]" />
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             <span
-              className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold transition ${
+              className={`flex h-5 w-5 sm:h-6 sm:w-6 items-center justify-center rounded-full text-[11px] font-bold transition ${
                 phase === "done"
                   ? "bg-clay text-white"
                   : phase === "burning"
@@ -376,247 +327,364 @@ export default function Checkout() {
               3
             </span>
             <span
-              className={`text-xs font-semibold uppercase tracking-wider transition ${
+              className={`font-semibold uppercase tracking-wider text-[11px] sm:text-xs transition ${
                 phase === "done" || phase === "burning" ? "text-ink" : "text-[#765442]/60"
               }`}
             >
-              Ignition & Glow
+              Confirmation
             </span>
           </div>
         </div>
 
-        {/* Phase 1 & 2: Details and Payment */}
+        {/* Phase 1 & 2: Details and Payment Grid */}
         {(phase === "details" || phase === "pay") && (
-          <div className="grid gap-8 md:grid-cols-[1fr_330px] items-start">
+          <div className="grid gap-6 sm:gap-8 md:grid-cols-[1fr_320px] items-start">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[.2em] text-clay">
-                A little closer to your glow
-              </p>
-              <h1 className="display mt-2 text-3xl sm:text-5xl text-ink">
-                {phase === "details" ? "Delivery details" : "Finish your payment"}
-              </h1>
-
-              {/* Mobile Dedicated Candle Card */}
-              <div className="md:hidden mt-4 rounded-2xl border border-[#8a614822] bg-[#fffaf3] p-3.5 shadow-sm">
-                <div className="flex items-center gap-3.5">
-                  <div className="flex-shrink-0 w-20 h-24 rounded-xl bg-[#f5ebe0]/80 border border-[#8a614818] flex items-center justify-center overflow-hidden">
-                    <div className="scale-[0.52] origin-center -my-14 -mx-10">
-                      <Candle stage={candleStage} showBadge={false} />
-                    </div>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="h-2 w-2 rounded-full bg-clay animate-pulse" />
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-clay">
-                        {phase === "details" ? "Step 1 of 3 · Crafting" : "Step 2 of 3 · Payment"}
-                      </span>
-                    </div>
-                    <p className="mt-0.5 text-sm font-semibold text-ink truncate">
-                      {phase === "details" ? "Spiral wick set in soy wax" : "Ember ready · Awaiting flame"}
-                    </p>
-                    <p className="mt-0.5 text-xs text-[#765442] line-clamp-1">
-                      {phase === "details"
-                        ? "Enter your delivery details below"
-                        : "Pay ₹" + total + " via UPI app or scan QR below"}
-                    </p>
-                    <div className="mt-2">
-                      <span className="inline-block text-[11px] font-medium text-clay bg-[#f5ebe0] rounded-full px-2.5 py-0.5">
-                        {phase === "details" ? "✓ Wax poured in studio" : "✓ Delivery details set"}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
               {/* Step 1: Input details form */}
               {phase === "details" && (
-                <form
-                  onSubmit={details}
-                  className="paper mt-5 space-y-4 rounded-3xl p-6 sm:p-8 shadow-sm bg-white/95"
-                >
-                  <label className="block text-sm text-[#765442]">
-                    Your name
-                    <input
-                      required
-                      value={form.name}
-                      onChange={(e) => setForm({ ...form, name: e.target.value })}
-                      className="mt-1.5 w-full rounded-xl border border-[#8a61483a] bg-white px-3.5 py-3 text-ink outline-clay focus:border-clay"
-                      placeholder="Your full name"
-                    />
-                  </label>
-                  <label className="block text-sm text-[#765442]">
-                    Delivery address
-                    <textarea
-                      required
-                      value={form.address}
-                      onChange={(e) => setForm({ ...form, address: e.target.value })}
-                      className="mt-1.5 h-24 w-full rounded-xl border border-[#8a61483a] bg-white px-3.5 py-3 text-ink outline-clay focus:border-clay"
-                      placeholder="House, street, city and PIN code"
-                    />
-                  </label>
-                  <label className="block text-sm text-[#765442]">
-                    Phone / WhatsApp
-                    <input
-                      required
-                      value={form.phone}
-                      onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                      className="mt-1.5 w-full rounded-xl border border-[#8a61483a] bg-white px-3.5 py-3 text-ink outline-clay focus:border-clay"
-                      placeholder="98765 43210"
-                    />
-                  </label>
-                  <div className="flex items-center justify-between pt-2">
-                    <span className="text-sm text-[#765442]">Order total:</span>
-                    <b className="display text-2xl text-ink">₹{total}</b>
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[.2em] text-clay">
+                      A little closer to your glow
+                    </p>
+                    <h1 className="display mt-1.5 text-3xl sm:text-4xl text-ink">
+                      Delivery details
+                    </h1>
                   </div>
-                  {error && (
-                    <div className="rounded-xl bg-red-50 p-3 text-sm text-red-700 border border-red-200">
-                      {error}
-                    </div>
-                  )}
-                  <button
-                    type="submit"
-                    className="w-full rounded-full bg-ink py-3.5 text-sm font-medium text-white hover:bg-clay transition shadow-sm cursor-pointer"
+
+                  <form
+                    onSubmit={details}
+                    className="paper rounded-3xl p-5 sm:p-7 space-y-4 shadow-sm bg-white/95"
                   >
-                    Continue to payment →
-                  </button>
-                </form>
+                    <label className="block text-xs sm:text-sm font-semibold text-[#765442]">
+                      Your Full Name
+                      <input
+                        required
+                        value={form.name}
+                        onChange={(e) => setForm({ ...form, name: e.target.value })}
+                        className="mt-1.5 w-full rounded-xl border border-[#8a61483a] bg-white px-3.5 py-3 text-sm text-ink outline-clay focus:border-clay"
+                        placeholder="e.g. Ananya Sharma"
+                      />
+                    </label>
+
+                    <label className="block text-xs sm:text-sm font-semibold text-[#765442]">
+                      Complete Delivery Address
+                      <textarea
+                        required
+                        value={form.address}
+                        onChange={(e) => setForm({ ...form, address: e.target.value })}
+                        className="mt-1.5 h-24 w-full rounded-xl border border-[#8a61483a] bg-white px-3.5 py-3 text-sm text-ink outline-clay focus:border-clay"
+                        placeholder="Flat/House number, Street, Landmark, City and PIN code"
+                      />
+                    </label>
+
+                    <label className="block text-xs sm:text-sm font-semibold text-[#765442]">
+                      Mobile / WhatsApp Number
+                      <input
+                        required
+                        value={form.phone}
+                        onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                        className="mt-1.5 w-full rounded-xl border border-[#8a61483a] bg-white px-3.5 py-3 text-sm text-ink outline-clay focus:border-clay"
+                        placeholder="e.g. 98765 43210"
+                      />
+                    </label>
+
+                    <div className="flex items-center justify-between pt-1 border-t border-[#8a614815]">
+                      <span className="text-xs sm:text-sm text-[#765442]">Total Amount:</span>
+                      <b className="display text-2xl text-ink">₹{total}</b>
+                    </div>
+
+                    {error && (
+                      <div className="rounded-xl bg-red-50 p-3 text-xs sm:text-sm text-red-700 border border-red-200">
+                        {error}
+                      </div>
+                    )}
+
+                    <button
+                      type="submit"
+                      className="w-full rounded-full bg-ink py-3.5 text-sm font-bold text-white hover:bg-clay transition shadow-sm cursor-pointer"
+                    >
+                      Continue to Payment (₹{total}) →
+                    </button>
+                  </form>
+                </div>
               )}
 
-              {/* Step 2: Payment Section */}
+              {/* Step 2: Payment Section (Clean, Spacious, Uncongested Mobile UI) */}
               {phase === "pay" && (
-                <div className="paper mt-5 rounded-3xl p-6 sm:p-8 shadow-sm bg-white/95">
-                  {/* Quick Action Button: Re-open UPI Apps Modal */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAppLaunched(false);
-                      setShowUpiModal(true);
-                    }}
-                    className="mb-5 flex items-center justify-between w-full rounded-2xl bg-gradient-to-r from-clay to-[#8a6148] px-5 py-3.5 text-white shadow-md hover:opacity-95 transition"
-                  >
-                    <div className="flex items-center gap-2.5 text-left">
-                      <span className="text-xl">⚡</span>
-                      <div>
-                        <p className="text-xs uppercase tracking-wider font-bold text-white/85">Instant Pay on Mobile</p>
-                        <p className="text-sm font-semibold">Pay ₹{total} via Google Pay, PhonePe, or Paytm</p>
+                <div className="space-y-4">
+                  {/* Clean Order Summary Strip */}
+                  <div className="flex items-center justify-between rounded-2xl bg-[#f5ebe0]/80 p-3.5 sm:p-4 border border-[#8a61481a]">
+                    <div>
+                      <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-clay block">
+                        Amount to Pay
+                      </span>
+                      <div className="flex items-baseline gap-2 mt-0.5">
+                        <span className="display text-2xl sm:text-4xl text-ink">₹{total}</span>
+                        <span className="text-xs text-[#765442]">
+                          ({items.length} candle{items.length > 1 ? "s" : ""})
+                        </span>
                       </div>
                     </div>
-                    <span className="text-sm font-bold bg-white/20 rounded-xl px-2.5 py-1">Open Apps →</span>
-                  </button>
-
-                  {/* HIGH-VISIBILITY MANDATORY SCREENSHOT NOTICE */}
-                  <div className="mb-6 rounded-2xl border-2 border-amber-300 bg-amber-50/90 p-4 sm:p-5 shadow-sm text-left">
-                    <div className="flex items-start gap-3">
-                      <span className="text-2xl select-none">⚠️</span>
-                      <div>
-                        <h4 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-amber-950">
-                          Mandatory Note: Upload Screenshot in Website to Finalize Order
-                        </h4>
-                        <p className="mt-1.5 text-xs sm:text-sm leading-relaxed text-amber-900 font-medium">
-                          After paying through your UPI app or scanning the QR code, please <b>take a screenshot of your payment confirmation</b> and <b>upload it below</b>. Your handcrafted candle order is only confirmed once this screenshot is uploaded!
-                        </p>
-                      </div>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setPhase("details")}
+                      className="rounded-xl bg-white px-3 py-1.5 text-xs font-semibold text-clay hover:bg-clay hover:text-white transition border border-[#8a614820] shadow-2xs cursor-pointer"
+                    >
+                      ← Edit details
+                    </button>
                   </div>
 
-                  {/* QR Code & UPI Information */}
-                  <div className="flex flex-wrap items-center gap-6">
-                    <div className="rounded-2xl bg-white p-3 border border-[#8a614820] shadow-sm">
-                      <QRCodeSVG value={paymentUri} size={150} />
+                  {/* Dynamic Helper Hint Banner when user taps an app */}
+                  {payHint && (
+                    <div className="rounded-2xl border border-clay/30 bg-[#fff8ed] p-3.5 text-xs leading-relaxed text-[#765442] shadow-xs flex items-start gap-2.5 animate-in fade-in">
+                      <span className="text-base select-none">💡</span>
+                      <p className="font-semibold text-ink flex-1">{payHint}</p>
                     </div>
-                    <div className="flex-1 min-w-[200px]">
-                      <p className="text-sm text-[#765442]">Pay exactly</p>
-                      <p className="display text-4xl text-ink">₹{total}</p>
-                      <div className="mt-2 flex flex-wrap items-center gap-2">
-                        <span className="text-sm text-[#765442]">UPI ID:</span>
-                        <b className="text-clay text-sm">{upi}</b>
+                  )}
+
+                  {/* 1. Pay with UPI App Section */}
+                  <div className="paper rounded-3xl p-5 sm:p-7 shadow-sm bg-white/95 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h2 className="text-base sm:text-lg font-bold text-ink">1. Pay with UPI App</h2>
+                        <p className="text-xs text-[#765442]">Instant payment on your phone</p>
+                      </div>
+                      <span className="rounded-full bg-[#f5ebe0] px-2.5 py-1 text-[10px] sm:text-[11px] font-bold text-clay">
+                        Step 1 of 2
+                      </span>
+                    </div>
+
+                    {/* Primary Hero Universal UPI Button */}
+                    <button
+                      type="button"
+                      onClick={() => triggerUpi()}
+                      className="w-full rounded-2xl bg-gradient-to-r from-clay to-[#6e4630] p-3.5 sm:p-4 text-white hover:opacity-95 transition shadow-md flex items-center justify-between cursor-pointer"
+                    >
+                      <div className="flex items-center gap-3 text-left">
+                        <div className="h-10 w-10 rounded-xl bg-white/20 flex items-center justify-center text-xl shadow-xs shrink-0">
+                          ⚡
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm sm:text-base font-bold text-white">
+                              Pay ₹{total} via Any UPI App
+                            </span>
+                            <span className="rounded-full bg-white/25 px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider text-white">
+                              Recommended
+                            </span>
+                          </div>
+                          <p className="text-[11px] sm:text-xs text-white/85 mt-0.5">
+                            Google Pay, PhonePe, Paytm, Cred, BHIM
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-xs font-bold bg-white/20 rounded-xl px-2.5 py-1 shrink-0">
+                        Pay →
+                      </span>
+                    </button>
+
+                    {/* App Quick Launcher Cards in 3 Columns */}
+                    <div>
+                      <p className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-[#765442]/70 mb-2">
+                        Or open your app directly
+                      </p>
+                      <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                        {/* PhonePe */}
+                        <button
+                          type="button"
+                          onClick={() => triggerUpi("PhonePe")}
+                          className="flex flex-col items-center justify-center rounded-2xl border border-[#8a614820] bg-white p-2.5 sm:p-3 hover:border-clay hover:shadow-xs transition cursor-pointer group"
+                        >
+                          <div className="h-9 w-9 rounded-xl bg-[#5f259f] flex items-center justify-center text-white font-bold text-sm shadow-2xs mb-1 group-hover:scale-105 transition-transform">
+                            पे
+                          </div>
+                          <span className="text-xs font-bold text-ink">PhonePe</span>
+                        </button>
+
+                        {/* Google Pay */}
+                        <button
+                          type="button"
+                          onClick={() => triggerUpi("Google Pay")}
+                          className="flex flex-col items-center justify-center rounded-2xl border border-[#8a614820] bg-white p-2.5 sm:p-3 hover:border-clay hover:shadow-xs transition cursor-pointer group"
+                        >
+                          <div className="h-9 w-9 rounded-xl bg-white border border-gray-100 flex items-center justify-center shadow-2xs mb-1 group-hover:scale-105 transition-transform">
+                            <svg className="w-5 h-5" viewBox="0 0 24 24">
+                              <path
+                                fill="#4285F4"
+                                d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"
+                              />
+                              <path
+                                fill="#34A853"
+                                d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"
+                              />
+                              <path
+                                fill="#FBBC05"
+                                d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.98 0 12s.45 3.82 1.25 5.42l4.03-3.15z"
+                              />
+                              <path
+                                fill="#EA4335"
+                                d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
+                              />
+                            </svg>
+                          </div>
+                          <span className="text-xs font-bold text-ink">GPay</span>
+                        </button>
+
+                        {/* Paytm */}
+                        <button
+                          type="button"
+                          onClick={() => triggerUpi("Paytm")}
+                          className="flex flex-col items-center justify-center rounded-2xl border border-[#8a614820] bg-white p-2.5 sm:p-3 hover:border-clay hover:shadow-xs transition cursor-pointer group"
+                        >
+                          <div className="h-9 w-9 rounded-xl bg-[#002970] flex items-center justify-center text-[#00b9f5] font-extrabold text-[10px] tracking-tight shadow-2xs mb-1 group-hover:scale-105 transition-transform">
+                            Paytm
+                          </div>
+                          <span className="text-xs font-bold text-ink">Paytm</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Quick 1-Tap Copy Rows for Studio UPI ID & Phone */}
+                    <div className="pt-1 space-y-2">
+                      <div className="flex items-center justify-between rounded-xl bg-[#f5ebe0]/70 px-3 py-2 border border-[#8a614818]">
+                        <div className="text-left min-w-0 pr-2">
+                          <span className="text-[10px] uppercase font-bold text-[#765442]/70 block">
+                            Studio UPI ID
+                          </span>
+                          <span className="text-xs font-bold text-ink truncate block">{upi}</span>
+                        </div>
                         <button
                           type="button"
                           onClick={copyUpiId}
-                          className="rounded-lg bg-[#f5ebe0] px-2.5 py-1 text-xs font-semibold text-clay hover:bg-clay hover:text-white transition cursor-pointer"
+                          className="shrink-0 rounded-lg bg-clay px-3 py-1 text-xs font-semibold text-white hover:bg-ink transition shadow-2xs cursor-pointer"
                         >
-                          {copiedUpi ? "Copied! ✓" : "Copy"}
+                          {copiedUpi ? "Copied! ✓" : "Copy ID"}
                         </button>
                       </div>
-                      <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                        <span className="text-xs text-[#765442]">Studio Mobile:</span>
-                        <b className="text-ink text-xs">+91 9552682389</b>
+
+                      <div className="flex items-center justify-between rounded-xl bg-[#f5ebe0]/70 px-3 py-2 border border-[#8a614818]">
+                        <div className="text-left min-w-0 pr-2">
+                          <span className="text-[10px] uppercase font-bold text-[#765442]/70 block">
+                            Studio Mobile (GPay / PhonePe)
+                          </span>
+                          <span className="text-xs font-bold text-ink truncate block">+91 9552682389</span>
+                        </div>
                         <button
                           type="button"
                           onClick={copyPhone}
-                          className="rounded-lg bg-[#f5ebe0] px-2 py-0.5 text-[11px] font-semibold text-[#765442] hover:bg-clay hover:text-white transition cursor-pointer"
+                          className="shrink-0 rounded-lg bg-white px-3 py-1 text-xs font-semibold text-[#765442] hover:bg-clay hover:text-white transition shadow-2xs cursor-pointer border border-[#8a614820]"
                         >
                           {copiedPhone ? "Copied! ✓" : "Copy Number"}
                         </button>
                       </div>
+                    </div>
+
+                    {/* QR Code Collapsible Drawer */}
+                    <div className="pt-2 border-t border-[#8a614815]">
                       <button
                         type="button"
-                        onClick={() => setPhase("details")}
-                        className="mt-3 text-xs text-clay underline hover:text-ink block"
+                        onClick={() => setShowQrExpanded(!showQrExpanded)}
+                        className="w-full py-2.5 rounded-xl bg-[#fffaf3] border border-[#8a614820] text-xs font-semibold text-clay hover:text-ink transition flex items-center justify-center gap-2 cursor-pointer"
                       >
-                        ← Edit delivery details
+                        <span>📷</span>
+                        <span>
+                          {showQrExpanded
+                            ? "Hide Payment QR Code ▲"
+                            : "Show QR Code to Scan / Screenshot ▼"}
+                        </span>
                       </button>
+
+                      {showQrExpanded && (
+                        <div className="mt-3 p-4 bg-[#fffaf3] rounded-2xl border border-[#8a614820] flex flex-col items-center text-center animate-in fade-in">
+                          <div className="p-2.5 bg-white rounded-xl shadow-xs border border-[#8a614815]">
+                            <QRCodeSVG value={paymentUri} size={150} />
+                          </div>
+                          <p className="mt-2 text-xs font-bold text-ink">Scan to pay ₹{total}</p>
+                          <p className="text-[11px] text-[#765442] mt-0.5 max-w-xs">
+                            Take a screenshot to use <b>&quot;Scan from Photo / Gallery&quot;</b> inside PhonePe or Google Pay!
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </div>
 
-                  {/* Steps Checklist */}
-                  <div className="mt-6 rounded-2xl bg-[#fffaf3] border border-[#8a614815] p-4">
-                    <p className="text-xs font-bold uppercase tracking-wider text-clay mb-2">How to complete your order:</p>
-                    <ol className="list-decimal space-y-1.5 pl-4 text-xs sm:text-sm leading-relaxed text-[#765442]">
-                      <li>Pay ₹{total} via Google Pay, PhonePe, Paytm, or scan the QR code above.</li>
-                      <li>Take a screenshot of the successful payment confirmation.</li>
-                      <li>Upload your screenshot below and click &quot;Finalize my order&quot;.</li>
-                    </ol>
-                  </div>
-
-                  {/* Screenshot Upload Zone */}
-                  <label
-                    className={`mt-6 block cursor-pointer rounded-2xl border-2 border-dashed p-5 text-center transition ${
-                      shot
-                        ? "border-green-600 bg-green-50/70 text-green-900"
-                        : "border-[#a66a46] bg-[#fffaf3] text-clay hover:bg-[#fff8ed]"
-                    }`}
-                  >
-                    {shot ? (
-                      <div className="flex flex-col items-center gap-1">
-                        <span className="text-xl">✅</span>
-                        <span className="text-sm font-bold text-green-900">Payment screenshot attached!</span>
-                        <span className="text-xs text-green-800 underline">Tap to change or re-upload image</span>
+                  {/* 2. Upload Payment Proof Section */}
+                  <div className="paper rounded-3xl p-5 sm:p-7 shadow-sm bg-white/95 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h2 className="text-base sm:text-lg font-bold text-ink">2. Upload Payment Proof</h2>
+                        <p className="text-xs text-[#765442]">Screenshot of successful payment</p>
                       </div>
-                    ) : (
-                      <div className="flex flex-col items-center gap-1.5">
-                        <span className="text-2xl">📸</span>
-                        <span className="text-sm font-bold text-clay">Upload payment screenshot</span>
-                        <span className="text-xs text-[#765442]">
-                          Required to finalize order · Tap to choose from photo gallery or camera
-                        </span>
+                      <span className="rounded-full bg-[#f5ebe0] px-2.5 py-1 text-[10px] sm:text-[11px] font-bold text-clay">
+                        Step 2 of 2
+                      </span>
+                    </div>
+
+                    <label
+                      className={`block cursor-pointer rounded-2xl border-2 border-dashed p-4 sm:p-5 text-center transition ${
+                        shot
+                          ? "border-emerald-600 bg-emerald-50/50 text-emerald-900"
+                          : "border-clay/40 bg-[#fffaf3] text-clay hover:bg-[#fff5e6]"
+                      }`}
+                    >
+                      {shot ? (
+                        <div className="flex flex-col items-center gap-2">
+                          <img
+                            src={shot}
+                            alt="Payment Screenshot Preview"
+                            className="h-28 sm:h-32 w-auto max-w-full rounded-xl object-contain border border-emerald-300 shadow-xs"
+                          />
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-800">
+                            <span>✓ Screenshot attached</span>
+                            <span className="underline font-normal text-emerald-700">
+                              (Tap to change image)
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center gap-1.5 py-2">
+                          <div className="h-11 w-11 rounded-full bg-[#f5ebe0] flex items-center justify-center text-xl shadow-2xs text-clay">
+                            📸
+                          </div>
+                          <p className="text-xs sm:text-sm font-bold text-ink">
+                            Tap to upload payment screenshot
+                          </p>
+                          <p className="text-[11px] sm:text-xs text-[#765442]">
+                            Select from photo gallery or take photo
+                          </p>
+                        </div>
+                      )}
+                      <input
+                        id="payment-screenshot-input"
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        className="hidden"
+                        onChange={upload}
+                      />
+                    </label>
+
+                    {error && (
+                      <div className="rounded-xl bg-red-50 p-3 text-xs sm:text-sm text-red-700 border border-red-200">
+                        {error}
                       </div>
                     )}
-                    <input
-                      id="payment-screenshot-input"
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp"
-                      className="hidden"
-                      onChange={upload}
-                    />
-                  </label>
 
-                  {error && (
-                    <div className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-700 border border-red-200">
-                      {error}
-                    </div>
-                  )}
-
-                  <button
-                    onClick={submit}
-                    className={`mt-5 w-full rounded-full py-4 text-sm font-semibold transition shadow-sm ${
-                      shot
-                        ? "bg-ink text-white hover:bg-clay cursor-pointer"
-                        : "bg-ink text-white hover:bg-clay cursor-pointer opacity-90"
-                    }`}
-                  >
-                    {shot ? "I’ve paid — finalize my order →" : "Upload screenshot above to finalize order"}
-                  </button>
+                    {/* Finalize Order Button */}
+                    <button
+                      type="button"
+                      onClick={submit}
+                      className={`w-full rounded-full py-3.5 sm:py-4 text-sm font-bold transition shadow-md cursor-pointer ${
+                        shot
+                          ? "bg-ink text-white hover:bg-clay"
+                          : "bg-[#765442]/35 text-white hover:bg-[#765442]/50"
+                      }`}
+                    >
+                      {shot
+                        ? `Confirm & Place Order (₹${total}) →`
+                        : "Upload screenshot above to finalize order"}
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -632,8 +700,10 @@ export default function Checkout() {
               </div>
               <div className="w-full pt-3 border-t border-[#8a61481a] text-center">
                 <p className="text-xs text-[#765442] leading-relaxed">
-                  {phase === "details" && "Your amber glass jar is poured with pure soy wax & spiral cotton wick."}
-                  {phase === "pay" && "Wick ember is set — complete UPI payment to ignite your candle order."}
+                  {phase === "details" &&
+                    "Your amber glass jar is poured with pure soy wax & spiral cotton wick."}
+                  {phase === "pay" &&
+                    "Wick ember is set — complete UPI payment to ignite your candle order."}
                 </p>
                 <div className="mt-4 bg-[#fff8ed] rounded-xl p-3 text-xs text-[#765442] flex justify-between items-center border border-[#8a614818]">
                   <span>Order Total:</span>
@@ -681,7 +751,9 @@ export default function Checkout() {
               </div>
 
               <div className="py-3 border-b border-[#8a614815]">
-                <p className="text-xs text-[#765442] uppercase tracking-wider font-semibold mb-2">Candles Ordered</p>
+                <p className="text-xs text-[#765442] uppercase tracking-wider font-semibold mb-2">
+                  Candles Ordered
+                </p>
                 <div className="space-y-1.5">
                   {orderCandles.map((item: any, idx: number) => (
                     <div key={idx} className="flex justify-between text-xs text-[#765442]">
@@ -745,361 +817,6 @@ export default function Checkout() {
           </div>
         )}
       </main>
-
-      {/* ========================================================================= */}
-      {/* AUTOMATIC POP-UP MODAL: UPI APPS SELECTION & PAYMENT ROUTING */}
-      {/* ========================================================================= */}
-      {showUpiModal && phase === "pay" && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setShowUpiModal(false);
-          }}
-        >
-          <div className="relative w-full max-w-md rounded-3xl bg-[#fffdf9] p-6 sm:p-7 shadow-2xl border border-[#8a614825] max-h-[92vh] overflow-y-auto">
-            {/* Close Modal Button */}
-            <button
-              type="button"
-              onClick={() => setShowUpiModal(false)}
-              className="absolute top-4 right-4 h-8 w-8 rounded-full bg-[#f5ebe0] text-clay hover:bg-clay hover:text-white flex items-center justify-center transition cursor-pointer font-bold text-sm"
-              aria-label="Close modal"
-            >
-              ✕
-            </button>
-
-            {/* Modal Header */}
-            <div className="text-center pr-6">
-              <div className="inline-flex items-center gap-1.5 rounded-full bg-[#f5ebe0] px-3 py-1 text-xs font-semibold text-clay">
-                <span>⚡ Instant UPI Payment</span>
-              </div>
-              <h3 className="display mt-2 text-2xl text-ink">Choose UPI App to Pay</h3>
-              <p className="mt-1 text-xs text-[#765442]">
-                Paying <b className="text-ink">₹{total}</b> to <span className="text-clay font-medium">Candlemate</span>
-              </p>
-            </div>
-
-            {/* HIGH-VISIBILITY MANDATORY SCREENSHOT INSTRUCTION */}
-            <div className="mt-4 rounded-2xl border-2 border-amber-300 bg-amber-50 p-3.5 text-left shadow-xs">
-              <div className="flex items-start gap-2.5">
-                <span className="text-xl select-none leading-none">⚠️</span>
-                <div>
-                  <p className="text-[11px] font-bold text-amber-950 uppercase tracking-wide">
-                    Mandatory: Upload Screenshot to Finalize Order
-                  </p>
-                  <p className="mt-1 text-xs leading-relaxed text-amber-900 font-medium">
-                    After paying in your app, please <b>take a screenshot</b> and <b>upload it on this website</b> to finalize your order.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Specific iOS Notice: Explaining direct buttons to avoid WhatsApp redirect */}
-            {isIos && (
-              <div className="mt-2.5 rounded-xl border border-blue-200 bg-blue-50/90 p-2.5 text-left flex items-start gap-2">
-                <span className="text-sm">💡</span>
-                <p className="text-[11px] leading-snug text-blue-900 font-medium">
-                  <b>iPhone tip:</b> Tap <b>Google Pay</b>, <b>PhonePe</b>, or <b>Paytm</b> directly below to open your app without being redirected to WhatsApp!
-                </p>
-              </div>
-            )}
-
-            {/* Modal Body: Either App Launcher Buttons or Post-Launch Instructions */}
-            {appLaunched ? (
-              <div className="mt-5 rounded-2xl bg-[#fff8ed] border border-[#8a614825] p-5 text-center">
-                <div className="mx-auto w-12 h-12 rounded-full bg-[#f5ebe0] flex items-center justify-center text-2xl mb-2.5 shadow-xs">
-                  ⚡
-                </div>
-                <h4 className="text-sm font-bold text-ink uppercase tracking-wide">
-                  Payment App Triggered ({selectedApp === "gpay" ? "Google Pay" : selectedApp === "phonepe" ? "PhonePe" : selectedApp === "paytm" ? "Paytm" : selectedApp === "bhim" ? "BHIM" : "UPI App"})
-                </h4>
-                <p className="mt-1 text-xs text-[#765442]">
-                  Paying <b className="text-ink">₹{total}</b> to Candlemate Studio
-                </p>
-
-                {/* CRITICAL HELPER: IF BANK BLOCKS BROWSER INTENT */}
-                <div className="mt-3.5 text-left rounded-xl border-2 border-amber-300 bg-amber-50/95 p-3 shadow-xs">
-                  <div className="flex items-start gap-2">
-                    <span className="text-base select-none">⚠️</span>
-                    <div>
-                      <p className="text-[11px] font-bold text-amber-950 uppercase tracking-wide">
-                        Did your app say &quot;Payment not allowed&quot; or &quot;Security error&quot;?
-                      </p>
-                      <p className="mt-1 text-xs leading-relaxed text-amber-900 font-medium">
-                        Certain banks (and Google Pay / PhonePe) restrict website links to personal UPI accounts. <b>Don&apos;t worry!</b> Your Studio UPI ID is already copied.
-                      </p>
-                      <p className="mt-1.5 text-xs text-amber-950 font-bold">
-                        👉 Open your app &gt; Tap &quot;Pay UPI ID / Number&quot; &gt; Paste <span className="underline">{upi}</span> or enter <span className="underline">9552682389</span>.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Quick Copy Action Box */}
-                <div className="mt-3 space-y-2">
-                  <div className="flex items-center justify-between rounded-xl bg-white px-3 py-2 border border-[#8a614820]">
-                    <div className="text-left min-w-0 pr-2">
-                      <span className="text-[10px] uppercase font-bold text-[#765442]/70 block">Studio UPI ID</span>
-                      <span className="text-xs font-bold text-ink truncate block">{upi}</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={copyUpiId}
-                      className="shrink-0 rounded-lg bg-clay px-3 py-1 text-xs font-semibold text-white hover:bg-ink transition shadow-xs cursor-pointer"
-                    >
-                      {copiedUpi ? "Copied! ✓" : "Copy ID"}
-                    </button>
-                  </div>
-
-                  <div className="flex items-center justify-between rounded-xl bg-white px-3 py-2 border border-[#8a614820]">
-                    <div className="text-left min-w-0 pr-2">
-                      <span className="text-[10px] uppercase font-bold text-[#765442]/70 block">Studio Mobile (GPay/PhonePe)</span>
-                      <span className="text-xs font-bold text-ink truncate block">+91 9552682389</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={copyPhone}
-                      className="shrink-0 rounded-lg bg-[#f5ebe0] px-3 py-1 text-xs font-semibold text-[#765442] hover:bg-clay hover:text-white transition shadow-xs cursor-pointer"
-                    >
-                      {copiedPhone ? "Copied! ✓" : "Copy Phone"}
-                    </button>
-                  </div>
-                </div>
-
-                {/* In-Modal Dynamic QR Code Drawer */}
-                <button
-                  type="button"
-                  onClick={() => setModalShowQr(!modalShowQr)}
-                  className="mt-3 w-full py-2 text-xs font-semibold text-clay bg-white rounded-xl border border-clay/30 hover:bg-[#fffaf3] transition flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <span>📷</span>
-                  <span>{modalShowQr ? "Hide QR Code ▲" : "Or Scan QR Code / Scan from Gallery ▼"}</span>
-                </button>
-
-                {modalShowQr && (
-                  <div className="mt-2 p-3 bg-white rounded-2xl border border-[#8a614820] flex flex-col items-center animate-in fade-in">
-                    <QRCodeSVG value={paymentUri} size={140} />
-                    <p className="mt-2 text-xs font-bold text-ink">Scan to pay ₹{total}</p>
-                    <p className="text-[11px] text-[#765442] mt-0.5">
-                      Tip: Take a screenshot and use &quot;Scan from photo/gallery&quot; in GPay or PhonePe!
-                    </p>
-                  </div>
-                )}
-
-                {/* Proceed to Upload Screenshot */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowUpiModal(false);
-                    const input = document.getElementById("payment-screenshot-input");
-                    if (input) input.click();
-                  }}
-                  className="mt-4 w-full rounded-full bg-ink py-3 text-xs font-bold text-white hover:bg-clay transition shadow-sm cursor-pointer"
-                >
-                  📸 I&apos;ve Paid — Upload Screenshot Now →
-                </button>
-
-                <div className="mt-2.5 flex items-center justify-center gap-3 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => openUpiApp("generic")}
-                    className="text-clay underline hover:text-ink cursor-pointer"
-                  >
-                    ⚡ Try Any Other UPI App
-                  </button>
-                  <span className="text-[#8a614840]">·</span>
-                  <button
-                    type="button"
-                    onClick={() => setAppLaunched(false)}
-                    className="text-clay underline hover:text-ink cursor-pointer"
-                  >
-                    ← Back to app list
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="mt-4 space-y-2.5">
-                {/* 1. Primary Universal Launcher: Opens native system app chooser */}
-                <button
-                  type="button"
-                  onClick={() => openUpiApp("generic")}
-                  className="w-full rounded-2xl bg-gradient-to-r from-clay to-[#6e4630] p-4 text-white hover:opacity-95 transition shadow-md flex items-center justify-between cursor-pointer"
-                >
-                  <div className="flex items-center gap-3 text-left">
-                    <div className="h-10 w-10 rounded-xl bg-white/20 flex items-center justify-center text-xl shadow-xs">
-                      ⚡
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-bold text-white">Pay via Any UPI App</p>
-                        <span className="rounded-full bg-white/25 px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider text-white">
-                          Recommended
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-white/85 mt-0.5">
-                        Native chooser (GPay, PhonePe, Paytm, Cred, BHIM)
-                      </p>
-                    </div>
-                  </div>
-                  <span className="text-xs font-bold bg-white/20 rounded-xl px-2.5 py-1 shrink-0">
-                    Pay ₹{total} →
-                  </span>
-                </button>
-
-                <div className="relative py-1 flex items-center justify-center">
-                  <div className="border-t border-[#8a614820] w-full" />
-                  <span className="bg-[#fffdf9] px-2 text-[10px] uppercase font-bold text-[#765442]/60 tracking-wider">
-                    Or select specific app
-                  </span>
-                </div>
-
-                {/* 2. Google Pay */}
-                <button
-                  type="button"
-                  onClick={() => openUpiApp("gpay")}
-                  className="w-full flex items-center justify-between rounded-2xl border border-[#8a614820] bg-white p-3 hover:border-clay hover:shadow-md transition group cursor-pointer"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-xl bg-white border border-gray-100 flex items-center justify-center shadow-xs">
-                      <svg className="w-5 h-5" viewBox="0 0 24 24">
-                        <path
-                          fill="#4285F4"
-                          d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"
-                        />
-                        <path
-                          fill="#34A853"
-                          d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"
-                        />
-                        <path
-                          fill="#FBBC05"
-                          d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.98 0 12s.45 3.82 1.25 5.42l4.03-3.15z"
-                        />
-                        <path
-                          fill="#EA4335"
-                          d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
-                        />
-                      </svg>
-                    </div>
-                    <div className="text-left">
-                      <p className="text-xs font-bold text-ink group-hover:text-clay">Google Pay</p>
-                      <p className="text-[11px] text-[#765442]">Pay ₹{total} via Google Pay</p>
-                    </div>
-                  </div>
-                  <span className="text-xs font-semibold text-clay group-hover:translate-x-0.5 transition-transform">
-                    Pay →
-                  </span>
-                </button>
-
-                {/* 3. PhonePe */}
-                <button
-                  type="button"
-                  onClick={() => openUpiApp("phonepe")}
-                  className="w-full flex items-center justify-between rounded-2xl border border-[#8a614820] bg-white p-3 hover:border-clay hover:shadow-md transition group cursor-pointer"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-xl bg-[#5f259f] flex items-center justify-center text-white font-bold text-sm shadow-xs">
-                      पे
-                    </div>
-                    <div className="text-left">
-                      <p className="text-xs font-bold text-ink group-hover:text-clay">PhonePe</p>
-                      <p className="text-[11px] text-[#765442]">Pay ₹{total} via PhonePe</p>
-                    </div>
-                  </div>
-                  <span className="text-xs font-semibold text-clay group-hover:translate-x-0.5 transition-transform">
-                    Pay →
-                  </span>
-                </button>
-
-                {/* 4. Paytm */}
-                <button
-                  type="button"
-                  onClick={() => openUpiApp("paytm")}
-                  className="w-full flex items-center justify-between rounded-2xl border border-[#8a614820] bg-white p-3 hover:border-clay hover:shadow-md transition group cursor-pointer"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-xl bg-[#002970] flex items-center justify-center text-[#00b9f5] font-extrabold text-[10px] tracking-tight shadow-xs">
-                      Paytm
-                    </div>
-                    <div className="text-left">
-                      <p className="text-xs font-bold text-ink group-hover:text-clay">Paytm</p>
-                      <p className="text-[11px] text-[#765442]">Pay ₹{total} via Paytm</p>
-                    </div>
-                  </div>
-                  <span className="text-xs font-semibold text-clay group-hover:translate-x-0.5 transition-transform">
-                    Pay →
-                  </span>
-                </button>
-
-                {/* 5. BHIM / Other UPI */}
-                <button
-                  type="button"
-                  onClick={() => openUpiApp("bhim")}
-                  className="w-full flex items-center justify-between rounded-2xl border border-[#8a614820] bg-white p-3 hover:border-clay hover:shadow-md transition group cursor-pointer"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-[#f37021] to-[#007a3d] flex items-center justify-center text-white font-bold text-[11px] shadow-xs">
-                      UPI
-                    </div>
-                    <div className="text-left">
-                      <p className="text-xs font-bold text-ink group-hover:text-clay">BHIM / Other UPI</p>
-                      <p className="text-[11px] text-[#765442]">Pay with any other UPI app</p>
-                    </div>
-                  </div>
-                  <span className="text-xs font-semibold text-clay group-hover:translate-x-0.5 transition-transform">
-                    Pay →
-                  </span>
-                </button>
-
-                {/* Copy UPI ID Box & Phone Number */}
-                <div className="pt-1 space-y-2">
-                  <div className="flex items-center justify-between rounded-xl bg-[#f5ebe0]/80 px-3 py-2 border border-[#8a614818]">
-                    <div className="text-left min-w-0 pr-2">
-                      <span className="text-[10px] uppercase font-bold text-[#765442]/70 block">Studio UPI ID</span>
-                      <span className="text-xs font-bold text-ink truncate block">{upi}</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={copyUpiId}
-                      className="shrink-0 rounded-lg bg-clay px-3 py-1 text-xs font-semibold text-white hover:bg-ink transition shadow-xs cursor-pointer"
-                    >
-                      {copiedUpi ? "Copied! ✓" : "Copy ID"}
-                    </button>
-                  </div>
-
-                  <div className="flex items-center justify-between rounded-xl bg-[#f5ebe0]/80 px-3 py-2 border border-[#8a614818]">
-                    <div className="text-left min-w-0 pr-2">
-                      <span className="text-[10px] uppercase font-bold text-[#765442]/70 block">Studio Phone (GPay/PhonePe)</span>
-                      <span className="text-xs font-bold text-ink truncate block">+91 9552682389</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={copyPhone}
-                      className="shrink-0 rounded-lg bg-white px-3 py-1 text-xs font-semibold text-[#765442] hover:bg-clay hover:text-white transition shadow-xs cursor-pointer border border-[#8a614820]"
-                    >
-                      {copiedPhone ? "Copied! ✓" : "Copy Phone"}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Dismiss Modal & Show QR Code Option */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowUpiModal(false);
-                    const qrSection = document.getElementById("payment-screenshot-input");
-                    if (qrSection) qrSection.scrollIntoView({ behavior: "smooth" });
-                  }}
-                  className="mt-3 w-full py-2 text-xs font-medium text-[#765442] hover:text-ink transition flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <span>📷</span>
-                  <span>Prefer scanning QR code on screen? Click here</span>
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </>
   );
 }
