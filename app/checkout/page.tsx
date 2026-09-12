@@ -619,7 +619,10 @@ export default function Checkout() {
             {/* Order Confirmation Card with Candle Items Breakdown */}
             <div className="mt-6 rounded-2xl bg-[#fff8ed] p-5 border border-[#8a614820] w-full text-left">
               <div className="flex justify-between items-center pb-3 border-b border-[#8a614815]">
-                <p className="text-xs text-[#765442] uppercase tracking-wider font-semibold">Order ID</p>
+                <div className="flex items-center gap-2">
+                  <img src="/logo.png" alt="Candlemate" className="h-6 w-6 object-contain" />
+                  <p className="text-xs text-[#765442] uppercase tracking-wider font-semibold">Order ID</p>
+                </div>
                 <p className="display text-xl font-bold text-clay">{displayId}</p>
               </div>
 

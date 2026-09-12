@@ -33,8 +33,20 @@ export function Header() {
   return (
     <header className="sticky top-0 z-40 border-b border-[#5c39271a] bg-[#fff8ed]/95 backdrop-blur transition-all">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-3.5 sm:py-4">
-        <Link href="/" className="display text-2xl font-bold tracking-tight">
-          candlemate<span className="text-gold">.</span>
+        <Link href="/" className="flex items-center gap-2.5 sm:gap-3 group">
+          <img
+            src="/logo.png"
+            alt="Candlemate Logo"
+            className="h-9 w-9 sm:h-11 sm:w-11 object-contain transition-transform duration-300 group-hover:scale-105"
+          />
+          <div className="flex flex-col">
+            <span className="display text-xl sm:text-2xl font-bold tracking-tight text-ink leading-tight">
+              candlemate<span className="text-gold">.</span>
+            </span>
+            <span className="hidden sm:block text-[9px] uppercase tracking-[0.2em] text-clay font-medium -mt-0.5">
+              Love · Cherish · Feel
+            </span>
+          </div>
         </Link>
 
         <nav className="flex items-center gap-4 sm:gap-6 text-sm">

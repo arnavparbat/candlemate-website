@@ -16,9 +16,12 @@ export default function Home() {
         <section className="grain overflow-hidden border-b border-[#5c39271a]">
           <div className="mx-auto grid max-w-6xl items-center gap-3 px-4 py-3 sm:gap-12 sm:px-5 sm:py-14 grid-cols-[1.2fr_.8fr] md:grid-cols-[1.1fr_.9fr]">
             <div>
-              <p className="mb-1 sm:mb-4 text-[10px] sm:text-xs font-bold uppercase tracking-[.2em] text-clay">
-                Hand-poured in small batches
-              </p>
+              <div className="mb-1.5 sm:mb-4 flex items-center gap-2">
+                <img src="/logo.png" alt="Candlemate Emblem" className="h-5 w-5 sm:h-6 sm:w-6 object-contain opacity-90" />
+                <p className="text-[10px] sm:text-xs font-bold uppercase tracking-[.2em] text-clay">
+                  Hand-poured in small batches
+                </p>
+              </div>
               <h1 className="display max-w-xl text-2xl sm:text-6xl sm:leading-[.92] leading-tight text-ink">
                 Light a little <i className="font-normal text-clay">slower.</i>
               </h1>
@@ -64,8 +67,34 @@ export default function Home() {
           </div>
         </section>
       </main>
-      <footer className="border-t border-[#5c39271a] px-5 py-8 text-center text-xs sm:text-sm text-[#765442]">
-        candlemate. made for slow moments · <a href="/admin" className="underline">studio login</a>
+      <footer className="border-t border-[#5c39271a] bg-[#fffaf3] px-5 py-10 sm:py-12 text-center text-xs sm:text-sm text-[#765442]">
+        <div className="mx-auto flex flex-col items-center justify-center gap-3.5 max-w-md">
+          <img
+            src="/logo.png"
+            alt="Candlemate Logo"
+            className="h-16 w-16 sm:h-20 sm:w-20 object-contain drop-shadow-xs transition-transform hover:scale-105"
+          />
+          <div className="space-y-1">
+            <p className="display text-xl font-bold text-ink">
+              candlemate<span className="text-gold">.</span>
+            </p>
+            <p className="text-[10px] sm:text-[11px] uppercase tracking-[0.25em] text-clay font-medium">
+              Love · Cherish · Feel
+            </p>
+          </div>
+          <p className="text-xs text-[#765442]/90 max-w-xs leading-relaxed">
+            Natural candles designed for evening rituals, unhurried conversations, and calm spaces.
+          </p>
+          <div className="pt-3 border-t border-[#5c392715] w-full text-[11px] text-[#765442]/70 flex items-center justify-center gap-2">
+            <span>© Candlemate</span>
+            <span>·</span>
+            <span>Made for slow moments</span>
+            <span>·</span>
+            <a href="/admin" className="underline hover:text-ink transition">
+              studio login
+            </a>
+          </div>
+        </div>
       </footer>
     </>
   );
