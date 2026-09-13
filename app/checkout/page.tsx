@@ -503,7 +503,12 @@ export default function Checkout() {
                   <div className="paper rounded-3xl p-5 sm:p-7 shadow-sm bg-white/95 space-y-5">
                     <div className="flex items-center justify-between">
                       <div>
-                        <h2 className="text-base sm:text-lg font-bold text-ink">1. Complete Payment</h2>
+                        <div className="flex items-center gap-2">
+                          <h2 className="text-base sm:text-lg font-bold text-ink">1. Complete Payment</h2>
+                          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-extrabold text-emerald-800 uppercase tracking-wide">
+                            Updated
+                          </span>
+                        </div>
                         <p className="text-xs text-[#765442]">Pay Candlemate Studio with any UPI app</p>
                       </div>
                       <span className="rounded-full bg-[#f5ebe0] px-2.5 py-1 text-[10px] sm:text-[11px] font-bold text-clay">
