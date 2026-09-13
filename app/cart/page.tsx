@@ -34,8 +34,8 @@ export default function Cart() {
                 <div key={item.id} className="paper flex gap-4 rounded-2xl p-4 shadow-sm">
                   <img
                     className="h-24 w-20 rounded-xl object-cover border border-[#8a61481a]"
-                    src={item.images[0]}
-                    alt=""
+                    src={item.images?.[0] || "/hero-candle.jpg"}
+                    alt={item.name}
                   />
                   <div className="flex-1">
                     <div className="flex justify-between gap-2">
