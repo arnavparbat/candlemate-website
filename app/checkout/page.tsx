@@ -149,13 +149,13 @@ export default function Checkout() {
 
     if (isAndroid) {
       if (appName === "PhonePe") {
-        return "intent:#Intent;package=com.phonepe.app;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;S.browser_fallback_url=https%3A%2F%2Fplay.google.com%2Fstore%2Fapps%2Fdetails%3Fid%3Dcom.phonepe.app;end";
+        return "phonepe://";
       }
       if (appName === "Google Pay") {
-        return "intent:#Intent;package=com.google.android.apps.nbu.paisa.user;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;S.browser_fallback_url=https%3A%2F%2Fplay.google.com%2Fstore%2Fapps%2Fdetails%3Fid%3Dcom.google.android.apps.nbu.paisa.user;end";
+        return "tez://upi/";
       }
       if (appName === "Paytm") {
-        return "intent:#Intent;package=net.one97.paytm;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;S.browser_fallback_url=https%3A%2F%2Fplay.google.com%2Fstore%2Fapps%2Fdetails%3Fid%3Dnet.one97.paytm;end";
+        return "paytmmp://";
       }
       return paymentUri;
     }
