@@ -62,6 +62,31 @@ export default function Admin() {
   const [isLiveConnected, setIsLiveConnected] = useState(false);
   const [newOrderAlert, setNewOrderAlert] = useState<Order | null>(null);
 
+  // Product Edit State
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [editForm, setEditForm] = useState<{
+    name: string;
+    price: string | number;
+    description: string;
+    burnTime: string;
+    ingredients: string;
+    category: string;
+    images: string[];
+    available: boolean;
+  }>({
+    name: "",
+    price: "",
+    description: "",
+    burnTime: "30–35 hours",
+    ingredients: "Soy wax, cotton wick",
+    category: "Jar candle",
+    images: [],
+    available: true,
+  });
+  const [isSavingProduct, setIsSavingProduct] = useState(false);
+  const [editNewImageUrl, setEditNewImageUrl] = useState("");
+  const [isProcessingEditPhoto, setIsProcessingEditPhoto] = useState(false);
+
   function playOrderChime() {
     try {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
@@ -519,8 +544,148 @@ export default function Admin() {
     load();
   }
 
+  function startEditingProduct(p: Product) {
+    setEditingProduct(p);
+    setEditForm({
+      name: p.name || "",
+      price: p.price ?? "",
+      description: p.description || "",
+      burnTime: p.burnTime || "30–35 hours",
+      ingredients: p.ingredients || "Soy wax, cotton wick",
+      category: p.category || "Jar candle",
+      images: Array.isArray(p.images) ? [...p.images] : [],
+      available: p.available !== false,
+    });
+    setEditNewImageUrl("");
+  }
+
+  function closeEditingProduct() {
+    if (isSavingProduct) return;
+    setEditingProduct(null);
+  }
+
+  async function handleEditProductPhotoFiles(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    setIsProcessingEditPhoto(true);
+    setNotice("Processing photos from your device...");
+    try {
+      const urls: string[] = [];
+      for (const file of files) {
+        const optimized = await fileToOptimizedDataUrl(file);
+        urls.push(optimized);
+      }
+      setEditForm((prev) => ({
+        ...prev,
+        images: [...prev.images, ...urls],
+      }));
+      setNotice(`Added ${urls.length} photo(s) to ${editForm.name || "candle"}.`);
+    } catch {
+      setNotice("Failed to process one or more photos.");
+    } finally {
+      setIsProcessingEditPhoto(false);
+      e.target.value = "";
+    }
+  }
+
+  function addEditImageUrl() {
+    const trimmed = editNewImageUrl.trim();
+    if (!trimmed) return;
+    setEditForm((prev) => ({
+      ...prev,
+      images: [...prev.images, trimmed],
+    }));
+    setEditNewImageUrl("");
+  }
+
+  function removeEditPhoto(index: number) {
+    if (editForm.images.length <= 1) {
+      setNotice("Product must have at least one photo.");
+      return;
+    }
+    setEditForm((prev) => ({
+      ...prev,
+      images: prev.images.filter((_, i) => i !== index),
+    }));
+  }
+
+  function makeCoverPhoto(index: number) {
+    if (index === 0) return;
+    setEditForm((prev) => {
+      const selected = prev.images[index];
+      const rest = prev.images.filter((_, i) => i !== index);
+      return {
+        ...prev,
+        images: [selected, ...rest],
+      };
+    });
+  }
+
+  async function saveEditedProduct(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingProduct) return;
+
+    if (!editForm.name.trim()) {
+      setNotice("Please enter a candle name.");
+      return;
+    }
+
+    const numPrice = Number(editForm.price);
+    if (isNaN(numPrice) || numPrice < 0) {
+      setNotice("Please enter a valid price in rupees.");
+      return;
+    }
+
+    if (!editForm.images || !editForm.images.length) {
+      setNotice("The candle must have at least one photo.");
+      return;
+    }
+
+    setIsSavingProduct(true);
+    setNotice(`Saving changes for "${editForm.name}"...`);
+
+    try {
+      const payload: Product = {
+        id: editingProduct.id,
+        name: editForm.name.trim(),
+        price: numPrice,
+        description: editForm.description.trim(),
+        burnTime: editForm.burnTime.trim(),
+        ingredients: editForm.ingredients.trim(),
+        category: editForm.category.trim(),
+        images: editForm.images,
+        available: editForm.available,
+      };
+
+      const res = await fetch(`/api/products/${encodeURIComponent(editingProduct.id)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        throw new Error(`Server returned status ${res.status}`);
+      }
+
+      const updated = await res.json();
+
+      // Immediately update local admin state so UI reflects edits instantly
+      setProducts((prev) =>
+        prev.map((item) => (item.id === editingProduct.id ? updated : item))
+      );
+
+      setNotice(`✓ "${updated.name}" updated! Changes are now live on the customer store.`);
+      setEditingProduct(null);
+      load(); // re-verify in background
+    } catch (err: any) {
+      setNotice(`Failed to save changes: ${err.message}`);
+    } finally {
+      setIsSavingProduct(false);
+    }
+  }
+
   async function updateProduct(p: Product, patch: Partial<Product>) {
-    await fetch(`/api/products/${p.id}`, {
+    await fetch(`/api/products/${encodeURIComponent(p.id)}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...p, ...patch }),
@@ -569,7 +734,7 @@ export default function Admin() {
 
   async function remove(id: string) {
     if (confirm("Remove this product from the collection?")) {
-      await fetch(`/api/products/${id}`, { method: "DELETE" });
+      await fetch(`/api/products/${encodeURIComponent(id)}`, { method: "DELETE" });
       load();
     }
   }
@@ -920,14 +1085,35 @@ export default function Admin() {
                       alt=""
                       className="h-16 w-16 rounded-xl object-cover border border-[#8a61481a]"
                     />
-                    <div className="flex-1">
-                      <b className="text-base text-ink">{p.name}</b>
-                      <p className="text-xs text-[#765442]">
-                        ₹{p.price} · {p.category}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <b className="text-base text-ink">{p.name}</b>
+                        <span className="rounded-full bg-[#8a614815] px-2 py-0.5 text-[10px] font-bold text-clay">
+                          {p.category}
+                        </span>
+                      </div>
+                      <p className="text-xs text-[#765442] mt-0.5">
+                        <span className="font-bold text-clay">₹{p.price}</span> · Burn time: {p.burnTime || "30–35h"}
                       </p>
+                      {p.description && (
+                        <p className="text-xs text-[#765442]/80 line-clamp-1 mt-1">
+                          {p.description}
+                        </p>
+                      )}
 
-                      {/* Photo management for existing candle */}
-                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                      {/* Action buttons: Edit, Photo, etc */}
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => startEditingProduct(p)}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-ink text-white px-3 py-1 text-xs font-semibold hover:bg-clay transition shadow-2xs cursor-pointer"
+                        >
+                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                          <span>Edit Details</span>
+                        </button>
+
                         <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#8a61483a] bg-[#fff8ed] px-2.5 py-1 text-xs font-medium text-clay hover:bg-clay hover:text-white transition">
                           <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -1276,6 +1462,286 @@ export default function Admin() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Product Edit Modal */}
+      {editingProduct && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-3 sm:p-4 backdrop-blur-sm overflow-y-auto"
+          onClick={closeEditingProduct}
+        >
+          <div
+            className="relative flex max-h-[94vh] w-full max-w-2xl flex-col rounded-3xl bg-[#fff8ed] shadow-2xl border border-[#8a61483a] overflow-hidden my-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-[#8a614820] bg-[#f5ede0] px-5 sm:px-6 py-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">✏️</span>
+                  <h3 className="display text-lg sm:text-xl text-ink font-bold">
+                    Edit Candle: {editingProduct.name}
+                  </h3>
+                </div>
+                <p className="text-xs text-[#765442] mt-0.5">
+                  Edits save directly to cloud database and sync immediately with the customer page.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeEditingProduct}
+                disabled={isSavingProduct}
+                className="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-full bg-white/90 text-lg font-bold text-[#765442] hover:bg-clay hover:text-white transition shadow-sm cursor-pointer disabled:opacity-50"
+                title="Close editor"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body / Form */}
+            <form onSubmit={saveEditedProduct} className="flex flex-col flex-1 overflow-hidden">
+              <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4">
+                {/* Candle Name & Price */}
+                <div className="grid gap-3.5 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-[#765442] mb-1">
+                      Candle Name *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={editForm.name}
+                      onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                      placeholder="e.g. Amber & Sandalwood"
+                      className="w-full rounded-xl border border-[#8a614830] bg-white px-3.5 py-2.5 text-sm text-ink outline-clay shadow-2xs font-medium"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-[#765442] mb-1">
+                      Price (₹ INR) *
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3.5 top-2.5 text-sm font-bold text-[#765442]">₹</span>
+                      <input
+                        type="number"
+                        required
+                        min="0"
+                        step="1"
+                        value={editForm.price}
+                        onChange={(e) => setEditForm({ ...editForm, price: e.target.value })}
+                        placeholder="e.g. 649"
+                        className="w-full rounded-xl border border-[#8a614830] bg-white pl-8 pr-3.5 py-2.5 text-sm font-bold text-ink outline-clay shadow-2xs"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Category & Stock Status */}
+                <div className="grid gap-3.5 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-[#765442] mb-1">
+                      Category
+                    </label>
+                    <select
+                      value={editForm.category}
+                      onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
+                      className="w-full rounded-xl border border-[#8a614830] bg-white px-3 py-2.5 text-sm text-ink outline-clay shadow-2xs"
+                    >
+                      <option value="Jar candle">Jar candle</option>
+                      <option value="Sculptural">Sculptural</option>
+                      <option value="Flower candle">Flower candle</option>
+                      <option value="Tin candle">Tin candle</option>
+                      <option value="Wax melts">Wax melts</option>
+                      <option value="Aromatherapy">Aromatherapy</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-[#765442] mb-1">
+                      Availability Status
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setEditForm({ ...editForm, available: !editForm.available })}
+                      className={`flex items-center justify-between w-full rounded-xl border px-3.5 py-2.5 text-sm font-semibold transition shadow-2xs cursor-pointer ${
+                        editForm.available
+                          ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                          : "border-stone-300 bg-stone-100 text-stone-600"
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <span
+                          className={`h-2.5 w-2.5 rounded-full ${
+                            editForm.available ? "bg-emerald-500 animate-pulse" : "bg-stone-400"
+                          }`}
+                        />
+                        {editForm.available ? "In Stock (Available)" : "Sold Out (Unavailable)"}
+                      </span>
+                      <span className="text-xs underline opacity-80">Toggle</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Burn Time & Ingredients */}
+                <div className="grid gap-3.5 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-[#765442] mb-1">
+                      Burn Time
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.burnTime}
+                      onChange={(e) => setEditForm({ ...editForm, burnTime: e.target.value })}
+                      placeholder="e.g. 40–45 hours"
+                      className="w-full rounded-xl border border-[#8a614830] bg-white px-3.5 py-2.5 text-sm text-ink outline-clay shadow-2xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-[#765442] mb-1">
+                      Ingredients & Fragrance
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.ingredients}
+                      onChange={(e) => setEditForm({ ...editForm, ingredients: e.target.value })}
+                      placeholder="e.g. 100% Soy wax, cotton wick, essential oils"
+                      className="w-full rounded-xl border border-[#8a614830] bg-white px-3.5 py-2.5 text-sm text-ink outline-clay shadow-2xs"
+                    />
+                  </div>
+                </div>
+
+                {/* Description */}
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-[#765442] mb-1">
+                    Description
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={editForm.description}
+                    onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                    placeholder="Write evocative notes about this candle's scent, feel, and mood..."
+                    className="w-full rounded-xl border border-[#8a614830] bg-white p-3 text-sm text-ink outline-clay shadow-2xs resize-y"
+                  />
+                </div>
+
+                {/* Product Photos Section */}
+                <div className="rounded-2xl border border-[#8a614820] bg-white/70 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-ink">
+                        Photos ({editForm.images.length})
+                      </h4>
+                      <p className="text-[11px] text-[#765442]">
+                        First photo is the main cover. Click &quot;Make Cover&quot; to set.
+                      </p>
+                    </div>
+
+                    <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-clay bg-[#f8ede0] px-3 py-1.5 text-xs font-medium text-clay hover:bg-clay hover:text-white transition shadow-2xs">
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      <span>Upload from Device</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        className="hidden"
+                        onChange={handleEditProductPhotoFiles}
+                        disabled={isProcessingEditPhoto}
+                      />
+                    </label>
+                  </div>
+
+                  {/* Existing Photos Grid */}
+                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5 pt-1">
+                    {editForm.images.map((img, idx) => (
+                      <div
+                        key={idx}
+                        className="relative group rounded-xl overflow-hidden border border-[#8a61482a] bg-[#19120c] aspect-square"
+                      >
+                        <img src={img} alt="" className="h-full w-full object-cover" />
+                        {idx === 0 && (
+                          <span className="absolute top-1 left-1 rounded-md bg-clay text-[10px] font-bold text-white px-1.5 py-0.5 shadow-xs">
+                            Cover
+                          </span>
+                        )}
+                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition flex flex-col items-center justify-center gap-1 p-1">
+                          {idx !== 0 && (
+                            <button
+                              type="button"
+                              onClick={() => makeCoverPhoto(idx)}
+                              className="rounded bg-white/90 px-1.5 py-0.5 text-[10px] font-bold text-ink hover:bg-white"
+                            >
+                              Make Cover
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => removeEditPhoto(idx)}
+                            disabled={editForm.images.length <= 1}
+                            className="rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-bold text-white hover:bg-red-700 disabled:opacity-40"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Add by URL option */}
+                  <div className="flex gap-2 pt-2 border-t border-[#8a614815]">
+                    <input
+                      type="url"
+                      value={editNewImageUrl}
+                      onChange={(e) => setEditNewImageUrl(e.target.value)}
+                      placeholder="Or paste an image URL (https://...)"
+                      className="flex-1 rounded-lg border border-[#8a614830] bg-white px-3 py-1.5 text-xs text-ink outline-clay"
+                    />
+                    <button
+                      type="button"
+                      onClick={addEditImageUrl}
+                      disabled={!editNewImageUrl.trim()}
+                      className="rounded-lg bg-[#f5ede0] border border-[#8a614830] px-3 py-1.5 text-xs font-semibold text-clay hover:bg-clay hover:text-white transition disabled:opacity-50 cursor-pointer"
+                    >
+                      + Add URL
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Footer Controls */}
+              <div className="flex items-center justify-between gap-3 border-t border-[#8a614820] bg-[#f5ede0] px-5 sm:px-6 py-4">
+                <button
+                  type="button"
+                  onClick={closeEditingProduct}
+                  disabled={isSavingProduct}
+                  className="rounded-xl border border-[#8a61483a] bg-white px-4 py-2.5 text-xs sm:text-sm font-medium text-[#765442] hover:bg-stone-100 transition cursor-pointer disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={isSavingProduct}
+                  className="flex items-center gap-2 rounded-xl bg-ink px-6 py-2.5 text-xs sm:text-sm font-bold text-white hover:bg-clay transition shadow-md cursor-pointer disabled:opacity-50"
+                >
+                  {isSavingProduct ? (
+                    <>
+                      <span className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                      <span>Saving & Syncing...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Save Changes & Sync ↗</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

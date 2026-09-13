@@ -32,7 +32,7 @@ export default function ProductPage() {
     }
 
     // Also fetch fresh details from API if product was updated in admin
-    fetch(`/api/products/${encodeURIComponent(id)}`)
+    fetch(`/api/products/${encodeURIComponent(id)}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((data) => {
         if (data && data.id && Array.isArray(data.images) && data.images.length > 0) {

@@ -1,11 +1,12 @@
 import { Header } from "@/components/header";
-import { ProductCard } from "@/components/product-card";
+import { ProductCollection } from "@/components/product-collection";
 import { Candle } from "@/components/candle";
 import { getStore } from "@/lib/store";
 import { isSupabaseConfigured, fetchProductsFromSupabase } from "@/lib/supabase";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export default async function Home() {
   let products = getStore().products;
@@ -79,11 +80,7 @@ export default async function Home() {
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-2.5 sm:gap-6 lg:grid-cols-4">
-            {products.map((p) => (
-              <ProductCard key={p.id} product={p} />
-            ))}
-          </div>
+          <ProductCollection initialProducts={products} />
         </section>
       </main>
       <footer className="border-t border-[#5c39271a] bg-[#fffaf3] px-5 py-10 sm:py-12 text-center text-xs sm:text-sm text-[#765442]">

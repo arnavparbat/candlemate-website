@@ -2,6 +2,10 @@ import { getStore, saveStore } from "@/lib/store";
 import { isSupabaseConfigured, fetchProductsFromSupabase, saveProductsToSupabase } from "@/lib/supabase";
 import { Product } from "@/lib/types";
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export async function GET() {
   let products = getStore().products;
@@ -19,7 +23,11 @@ export async function GET() {
     }
   }
 
-  return NextResponse.json(products);
+  return NextResponse.json(products, {
+    headers: {
+      "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+    },
+  });
 }
 
 export async function POST(req: Request) {
@@ -63,7 +71,16 @@ export async function POST(req: Request) {
       await saveProductsToSupabase(currentProducts);
     }
 
-    return NextResponse.json(newProduct, { status: 201 });
+    try {
+      revalidatePath("/");
+    } catch {}
+
+    return NextResponse.json(newProduct, {
+      status: 201,
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+      },
+    });
   } catch (err: any) {
     console.error("[API Products POST Error]", err);
     return NextResponse.json(
