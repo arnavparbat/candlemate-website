@@ -33,16 +33,11 @@ export function Header() {
   return (
     <header className="sticky top-0 z-40 border-b border-[#5c39271a] bg-[#fff8ed]/95 backdrop-blur transition-all">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-3.5 sm:px-5 py-3 sm:py-4">
-        <Link href="/" className="flex items-center gap-2 sm:gap-3 group shrink-0">
-          <img
-            src="/logo.png"
-            alt="Candlemate Logo"
-            className="h-11 w-auto sm:h-14 max-h-[56px] object-contain transition-transform duration-300 group-hover:scale-105"
-          />
+        <Link href="/" className="flex items-center group shrink-0">
           <img
             src="/logo-wordmark.png"
             alt="Candlemate"
-            className="h-4 sm:h-5 max-h-5 w-auto object-contain transition-opacity duration-300 group-hover:opacity-90"
+            className="h-5 sm:h-6 max-h-7 w-auto object-contain transition-opacity duration-300 group-hover:opacity-90"
           />
         </Link>
 

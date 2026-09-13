@@ -605,12 +605,7 @@ export default function Admin() {
     <main className="min-h-screen bg-[#f8f0e3]">
       <header className="border-b bg-[#fff8ed] sticky top-0 z-30 shadow-xs">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-3 sm:py-4">
-          <Link href="/" className="flex items-center gap-2.5 sm:gap-3 group">
-            <img
-              src="/logo.png"
-              alt="Candlemate Logo"
-              className="h-10 w-auto sm:h-12 object-contain transition-transform group-hover:scale-105"
-            />
+          <Link href="/" className="flex items-center group">
             <img
               src="/logo-wordmark.png"
               alt="Candlemate"
