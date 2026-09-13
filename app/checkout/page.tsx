@@ -451,41 +451,73 @@ export default function Checkout() {
 
 
 
-                  {/* ========================================================================= */}
-                  {/* ⚡ CASHFREE PAYMENT GATEWAY (OFFICIAL IN-PAGE CHECKOUT) */}
-                  {/* ========================================================================= */}
-                  <div className="rounded-3xl border-2 border-[#0066FF]/40 bg-gradient-to-br from-[#0066FF]/8 via-white to-[#0066FF]/5 p-5 sm:p-7 shadow-md text-left">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-[#0066FF] to-[#0040A8] text-2xl font-bold text-white shadow-sm">
-                          ⚡
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="rounded-full bg-[#0066FF] px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-white">
-                              Official Gateway
-                            </span>
-                            <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                              ✓ Auto-Verified · Secure Checkout
-                            </span>
-                          </div>
-                          <h3 className="text-lg sm:text-xl font-bold text-ink mt-0.5">
-                            Cashfree Payment Gateway
-                          </h3>
-                        </div>
+                  {/* Minimalist & Aesthetic Online Payment Card */}
+                  <div className="paper rounded-3xl p-6 sm:p-8 bg-white/95 border border-[#8a61481a] shadow-warm text-left space-y-6">
+                    {/* Header */}
+                    <div className="flex items-center justify-between pb-4 border-b border-[#8a614815]">
+                      <div>
+                        <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-widest text-clay block">
+                          Payment
+                        </span>
+                        <h2 className="display text-xl sm:text-2xl text-ink font-semibold mt-0.5">
+                          Instant UPI & Card
+                        </h2>
                       </div>
-                      <div className="text-right">
-                        <span className="text-xs text-[#765442]">Payable</span>
-                        <p className="display text-2xl font-bold text-ink leading-tight">₹{total}</p>
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f5ebe0] px-3 py-1 text-[11px] font-semibold text-clay">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 animate-pulse" />
+                        Auto-Verified
+                      </span>
+                    </div>
+
+                    {/* Supported UPI & Card Icons (Non-clickable badges) */}
+                    <div>
+                      <p className="text-xs text-[#765442] mb-3">
+                        Accepted payment methods:
+                      </p>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                        {/* Google Pay */}
+                        <div className="flex items-center gap-2.5 rounded-2xl border border-[#8a61481a] bg-[#fffdfa] px-3.5 py-2.5 shadow-2xs select-none">
+                          <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                            <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"/>
+                            <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"/>
+                            <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.98 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/>
+                            <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
+                          </svg>
+                          <span className="text-xs font-semibold text-ink">Google Pay</span>
+                        </div>
+
+                        {/* PhonePe */}
+                        <div className="flex items-center gap-2.5 rounded-2xl border border-[#8a61481a] bg-[#fffdfa] px-3.5 py-2.5 shadow-2xs select-none">
+                          <div className="h-4 w-4 rounded-full bg-[#5f259f] flex items-center justify-center text-white text-[9px] font-bold shrink-0">
+                            पे
+                          </div>
+                          <span className="text-xs font-semibold text-ink">PhonePe</span>
+                        </div>
+
+                        {/* Paytm */}
+                        <div className="flex items-center gap-2.5 rounded-2xl border border-[#8a61481a] bg-[#fffdfa] px-3.5 py-2.5 shadow-2xs select-none">
+                          <div className="h-4 w-4 rounded-full bg-[#002970] flex items-center justify-center text-[#00b9f5] text-[8px] font-black shrink-0">
+                            P
+                          </div>
+                          <span className="text-xs font-semibold text-ink">Paytm</span>
+                        </div>
+
+                        {/* UPI & Cards */}
+                        <div className="flex items-center gap-2.5 rounded-2xl border border-[#8a61481a] bg-[#fffdfa] px-3.5 py-2.5 shadow-2xs select-none">
+                          <span className="text-[9px] font-black text-emerald-800 bg-emerald-100 px-1 py-0.5 rounded shrink-0">
+                            UPI
+                          </span>
+                          <span className="text-xs font-semibold text-ink">UPI & Cards</span>
+                        </div>
                       </div>
                     </div>
 
-                    <p className="mt-3.5 text-xs sm:text-sm text-[#765442] leading-relaxed">
-                      Opens an <b>instant secure checkout</b>. Pay with <b>UPI (Google Pay, PhonePe, Paytm, BHIM), Debit/Credit Cards, or Netbanking</b>. Verified automatically in seconds — <b>no screenshot needed</b>!
+                    <p className="text-xs text-[#765442] leading-relaxed">
+                      Tap below to complete your payment. Once done, your order is automatically verified and scheduled for crafting.
                     </p>
 
                     {cashfreeError && (
-                      <div className="mt-3 rounded-xl bg-red-50 p-3 text-xs text-red-700 border border-red-200">
+                      <div className="rounded-xl bg-red-50 p-3 text-xs text-red-700 border border-red-200">
                         {cashfreeError}
                       </div>
                     )}
@@ -497,38 +529,34 @@ export default function Checkout() {
                           setPhase("burning");
                           verifyCashfreePayment(lastCashfreeOrderId);
                         }}
-                        className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-emerald-600 bg-emerald-50 py-3 px-4 text-xs font-bold text-emerald-800 hover:bg-emerald-100 transition cursor-pointer shadow-xs"
+                        className="flex w-full items-center justify-center gap-2 rounded-2xl border border-clay/30 bg-[#fffaf3] py-3 px-4 text-xs font-semibold text-clay hover:bg-clay hover:text-white transition cursor-pointer"
                       >
-                        <span>⚡ Already paid on PhonePe / GPay? Confirm Payment ({lastCashfreeOrderId})</span>
+                        <span>Already paid on UPI? Tap to re-confirm order</span>
                       </button>
                     )}
 
+                    {/* Primary Minimalist Button */}
                     <button
                       type="button"
                       onClick={() => payWithCashfree()}
                       disabled={cashfreeLoading}
-                      className="mt-5 flex w-full items-center justify-center gap-2.5 rounded-full bg-gradient-to-r from-[#0066FF] via-[#0052CC] to-[#003B99] py-4 px-6 text-base font-bold text-white shadow-lg hover:shadow-xl hover:opacity-95 transition disabled:opacity-75 cursor-pointer"
+                      className="w-full rounded-full bg-ink py-4 px-6 text-sm sm:text-base font-semibold text-white hover:bg-clay transition shadow-sm disabled:opacity-70 cursor-pointer flex items-center justify-center gap-2"
                     >
                       {cashfreeLoading ? (
                         <>
                           <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                          <span>Opening Cashfree Secure Modal...</span>
+                          <span>Opening secure payment...</span>
                         </>
                       ) : (
-                        <>
-                          <span className="text-lg">⚡</span>
-                          <span>Pay ₹{total} with Cashfree →</span>
-                        </>
+                        <span>Pay ₹{total} →</span>
                       )}
                     </button>
 
-                    <div className="mt-4 pt-3 border-t border-[#0066FF]/15 flex flex-wrap items-center justify-between text-xs text-[#765442]/80 gap-2">
-                      <div className="flex items-center gap-2">
-                        <span>🔒 Official Cashfree PG</span>
-                        <span>·</span>
-                        <span>256-bit Bank Grade Security</span>
-                      </div>
-                      <span className="font-semibold text-[#0066FF]">Instant Studio Confirmation ✓</span>
+                    <div className="pt-2 border-t border-[#8a614812] flex items-center justify-center gap-2 text-[11px] text-[#765442]/70">
+                      <svg className="w-3.5 h-3.5 text-clay/80 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                      </svg>
+                      <span>256-bit encrypted secure checkout · Instant studio confirmation</span>
                     </div>
                   </div>
                 </div>
@@ -619,13 +647,13 @@ export default function Checkout() {
                 <span className="display text-lg font-bold text-ink">₹{displayTotal}</span>
               </div>
 
-              <div className="mt-3 rounded-xl bg-blue-50 border border-blue-200 p-2.5 text-xs text-blue-900 flex items-center justify-between">
+              <div className="mt-3 rounded-xl bg-[#f5ebe0]/80 border border-[#8a61481a] p-2.5 text-xs text-[#765442] flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
-                  <span className="font-bold">⚡ Payment:</span>
-                  <span className="font-semibold text-emerald-800">Cashfree Gateway Verified ✓</span>
+                  <span className="font-bold text-ink">Payment:</span>
+                  <span className="font-semibold text-emerald-800">Verified ✓</span>
                 </div>
                 {(placedOrder?.transactionId || order?.transactionId) && (
-                  <span className="text-[10px] font-mono text-blue-800 truncate max-w-[150px]">
+                  <span className="text-[10px] font-mono text-[#765442] truncate max-w-[150px]">
                     Txn: {placedOrder?.transactionId || order?.transactionId}
                   </span>
                 )}
