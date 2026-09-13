@@ -33,6 +33,7 @@ export default function Checkout() {
   const [copiedPhone, setCopiedPhone] = useState(false);
   const [qrDownloaded, setQrDownloaded] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<"qr" | "number" | "app">("qr");
+  const [deviceType, setDeviceType] = useState<"android" | "ios" | "other">("other");
   const qrCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const hasAutoRedirected = useRef(false);
 
@@ -43,6 +44,13 @@ export default function Checkout() {
         if (x.upiId) setUpi(x.upiId);
       })
       .catch(() => {});
+
+    if (typeof navigator !== "undefined") {
+      const ua = navigator.userAgent || "";
+      if (/Android/i.test(ua)) setDeviceType("android");
+      else if (/iPhone|iPad|iPod/i.test(ua)) setDeviceType("ios");
+      else setDeviceType("other");
+    }
   }, []);
 
   // Standard NPCI formatted UPI URI (2 decimal places, clean payee & note)
@@ -114,6 +122,57 @@ export default function Checkout() {
     }
   }
 
+  function getAppLaunchLink(
+    appName: "PhonePe" | "Google Pay" | "Paytm" | "Universal",
+    mode: "scan" | "mobile" | "intent"
+  ): string {
+    const ua = typeof navigator !== "undefined" ? navigator.userAgent || "" : "";
+    const isAndroid = deviceType === "android" || /Android/i.test(ua);
+    const isIos = deviceType === "ios" || /iPhone|iPad|iPod/i.test(ua);
+
+    if (mode === "intent") {
+      if (isAndroid) {
+        const upiQuery = paymentUri.replace("upi://pay?", "");
+        if (appName === "PhonePe") {
+          return `intent://pay?${upiQuery}#Intent;scheme=upi;package=com.phonepe.app;end`;
+        }
+        if (appName === "Google Pay") {
+          return `intent://pay?${upiQuery}#Intent;scheme=upi;package=com.google.android.apps.nbu.paisa.user;end`;
+        }
+        if (appName === "Paytm") {
+          return `intent://pay?${upiQuery}#Intent;scheme=upi;package=net.one97.paytm;end`;
+        }
+        return paymentUri;
+      }
+      return paymentUri;
+    }
+
+    if (isAndroid) {
+      if (appName === "PhonePe") {
+        return "intent:#Intent;package=com.phonepe.app;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;S.browser_fallback_url=https%3A%2F%2Fplay.google.com%2Fstore%2Fapps%2Fdetails%3Fid%3Dcom.phonepe.app;end";
+      }
+      if (appName === "Google Pay") {
+        return "intent:#Intent;package=com.google.android.apps.nbu.paisa.user;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;S.browser_fallback_url=https%3A%2F%2Fplay.google.com%2Fstore%2Fapps%2Fdetails%3Fid%3Dcom.google.android.apps.nbu.paisa.user;end";
+      }
+      if (appName === "Paytm") {
+        return "intent:#Intent;package=net.one97.paytm;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;S.browser_fallback_url=https%3A%2F%2Fplay.google.com%2Fstore%2Fapps%2Fdetails%3Fid%3Dnet.one97.paytm;end";
+      }
+      return paymentUri;
+    }
+
+    if (isIos) {
+      if (appName === "PhonePe") return "phonepe://";
+      if (appName === "Google Pay") return "gpay://";
+      if (appName === "Paytm") return "paytmmp://";
+      return paymentUri;
+    }
+
+    if (appName === "PhonePe") return "phonepe://";
+    if (appName === "Google Pay") return "gpay://";
+    if (appName === "Paytm") return "paytmmp://";
+    return paymentUri;
+  }
+
   function launchUpiApp(
     appName: "PhonePe" | "Google Pay" | "Paytm" | "Universal",
     mode: "scan" | "mobile" | "intent"
@@ -124,11 +183,14 @@ export default function Checkout() {
         `✓ Studio Mobile (9552682389) copied! Opening ${appName}... In ${appName}, tap "To Mobile Number", paste 9552682389, and pay ₹${total}.`
       );
     } else if (mode === "scan") {
+      if (!qrDownloaded) {
+        saveQrCode();
+      }
       if (navigator?.clipboard) {
         navigator.clipboard.writeText(upi).catch(() => {});
       }
       setPayHint(
-        `Opening ${appName}... In ${appName}, tap the Scanner icon (📷) and choose the saved QR code from your gallery to pay ₹${total}.`
+        `✓ QR saved! Opening ${appName}... In ${appName}, tap the Scanner icon (📷) at the top, select the QR photo from your gallery, and pay ₹${total}!`
       );
     } else {
       if (navigator?.clipboard) {
@@ -139,23 +201,6 @@ export default function Checkout() {
       setPayHint(
         `Opening ${appName}... If your bank shows "Payment not allowed from website", simply use the "Scan QR Code" or "Pay to Mobile: 9552682389" tab above!`
       );
-    }
-
-    if (mode === "intent") {
-      window.location.href = paymentUri;
-      return;
-    }
-
-    let scheme = "";
-    if (appName === "PhonePe") scheme = "phonepe://";
-    else if (appName === "Google Pay") scheme = "gpay://";
-    else if (appName === "Paytm") scheme = "paytmmp://";
-    else scheme = paymentUri;
-
-    try {
-      window.location.href = scheme;
-    } catch {
-      window.location.href = paymentUri;
     }
   }
 
@@ -623,28 +668,39 @@ export default function Checkout() {
 
                         {/* Quick App Openers for Scanning */}
                         <div>
-                          <p className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-[#765442]/80 mb-2">
-                            After saving QR, open your app to scan:
-                          </p>
+                          <div className="flex items-center justify-between mb-2">
+                            <p className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-[#765442]/80">
+                              {qrDownloaded ? "👉 Step 2: Tap app to open & scan QR:" : "Tap app to open & scan QR:"}
+                            </p>
+                            {qrDownloaded && (
+                              <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full animate-pulse">
+                                QR in Gallery ✓
+                              </span>
+                            )}
+                          </div>
                           <div className="grid grid-cols-3 gap-2 sm:gap-3">
                             {/* PhonePe */}
-                            <button
-                              type="button"
+                            <a
+                              href={getAppLaunchLink("PhonePe", "scan")}
                               onClick={() => launchUpiApp("PhonePe", "scan")}
-                              className="flex flex-col items-center justify-center rounded-2xl border border-[#8a614820] bg-white p-2.5 sm:p-3 hover:border-clay hover:shadow-xs transition cursor-pointer group text-center"
+                              className={`flex flex-col items-center justify-center rounded-2xl border bg-white p-2.5 sm:p-3 hover:border-clay hover:shadow-xs transition cursor-pointer group text-center ${
+                                qrDownloaded ? "border-emerald-500 ring-2 ring-emerald-200/60 shadow-xs" : "border-[#8a614820]"
+                              }`}
                             >
                               <div className="h-9 w-9 rounded-xl bg-[#5f259f] flex items-center justify-center text-white font-bold text-sm shadow-2xs mb-1 group-hover:scale-105 transition-transform">
                                 पे
                               </div>
                               <span className="text-xs font-bold text-ink">PhonePe</span>
-                              <span className="text-[9px] text-[#765442] mt-0.5">Tap 📷 Scanner</span>
-                            </button>
+                              <span className="text-[9px] font-semibold text-clay mt-0.5">Open Scanner 📷</span>
+                            </a>
 
                             {/* Google Pay */}
-                            <button
-                              type="button"
+                            <a
+                              href={getAppLaunchLink("Google Pay", "scan")}
                               onClick={() => launchUpiApp("Google Pay", "scan")}
-                              className="flex flex-col items-center justify-center rounded-2xl border border-[#8a614820] bg-white p-2.5 sm:p-3 hover:border-clay hover:shadow-xs transition cursor-pointer group text-center"
+                              className={`flex flex-col items-center justify-center rounded-2xl border bg-white p-2.5 sm:p-3 hover:border-clay hover:shadow-xs transition cursor-pointer group text-center ${
+                                qrDownloaded ? "border-emerald-500 ring-2 ring-emerald-200/60 shadow-xs" : "border-[#8a614820]"
+                              }`}
                             >
                               <div className="h-9 w-9 rounded-xl bg-white border border-gray-100 flex items-center justify-center shadow-2xs mb-1 group-hover:scale-105 transition-transform">
                                 <svg className="w-5 h-5" viewBox="0 0 24 24">
@@ -667,21 +723,23 @@ export default function Checkout() {
                                 </svg>
                               </div>
                               <span className="text-xs font-bold text-ink">GPay</span>
-                              <span className="text-[9px] text-[#765442] mt-0.5">Tap 📷 Scanner</span>
-                            </button>
+                              <span className="text-[9px] font-semibold text-clay mt-0.5">Open Scanner 📷</span>
+                            </a>
 
                             {/* Paytm */}
-                            <button
-                              type="button"
+                            <a
+                              href={getAppLaunchLink("Paytm", "scan")}
                               onClick={() => launchUpiApp("Paytm", "scan")}
-                              className="flex flex-col items-center justify-center rounded-2xl border border-[#8a614820] bg-white p-2.5 sm:p-3 hover:border-clay hover:shadow-xs transition cursor-pointer group text-center"
+                              className={`flex flex-col items-center justify-center rounded-2xl border bg-white p-2.5 sm:p-3 hover:border-clay hover:shadow-xs transition cursor-pointer group text-center ${
+                                qrDownloaded ? "border-emerald-500 ring-2 ring-emerald-200/60 shadow-xs" : "border-[#8a614820]"
+                              }`}
                             >
                               <div className="h-9 w-9 rounded-xl bg-[#002970] flex items-center justify-center text-[#00b9f5] font-extrabold text-[10px] tracking-tight shadow-2xs mb-1 group-hover:scale-105 transition-transform">
                                 Paytm
                               </div>
                               <span className="text-xs font-bold text-ink">Paytm</span>
-                              <span className="text-[9px] text-[#765442] mt-0.5">Tap 📷 Scanner</span>
-                            </button>
+                              <span className="text-[9px] font-semibold text-clay mt-0.5">Open Scanner 📷</span>
+                            </a>
                           </div>
                         </div>
 
@@ -736,32 +794,32 @@ export default function Checkout() {
                               Tap to copy number & open app:
                             </p>
                             <div className="grid grid-cols-3 gap-2 sm:gap-3">
-                              <button
-                                type="button"
+                              <a
+                                href={getAppLaunchLink("PhonePe", "mobile")}
                                 onClick={() => launchUpiApp("PhonePe", "mobile")}
-                                className="flex flex-col items-center justify-center rounded-xl border border-[#8a614820] bg-white p-2 sm:p-2.5 hover:border-clay hover:shadow-2xs transition cursor-pointer"
+                                className="flex flex-col items-center justify-center rounded-xl border border-[#8a614820] bg-white p-2 sm:p-2.5 hover:border-clay hover:shadow-2xs transition cursor-pointer text-center"
                               >
                                 <span className="text-xs font-bold text-ink">PhonePe</span>
                                 <span className="text-[9px] text-[#765442] mt-0.5">To Mobile</span>
-                              </button>
+                              </a>
 
-                              <button
-                                type="button"
+                              <a
+                                href={getAppLaunchLink("Google Pay", "mobile")}
                                 onClick={() => launchUpiApp("Google Pay", "mobile")}
-                                className="flex flex-col items-center justify-center rounded-xl border border-[#8a614820] bg-white p-2 sm:p-2.5 hover:border-clay hover:shadow-2xs transition cursor-pointer"
+                                className="flex flex-col items-center justify-center rounded-xl border border-[#8a614820] bg-white p-2 sm:p-2.5 hover:border-clay hover:shadow-2xs transition cursor-pointer text-center"
                               >
                                 <span className="text-xs font-bold text-ink">GPay</span>
                                 <span className="text-[9px] text-[#765442] mt-0.5">Pay Phone</span>
-                              </button>
+                              </a>
 
-                              <button
-                                type="button"
+                              <a
+                                href={getAppLaunchLink("Paytm", "mobile")}
                                 onClick={() => launchUpiApp("Paytm", "mobile")}
-                                className="flex flex-col items-center justify-center rounded-xl border border-[#8a614820] bg-white p-2 sm:p-2.5 hover:border-clay hover:shadow-2xs transition cursor-pointer"
+                                className="flex flex-col items-center justify-center rounded-xl border border-[#8a614820] bg-white p-2 sm:p-2.5 hover:border-clay hover:shadow-2xs transition cursor-pointer text-center"
                               >
                                 <span className="text-xs font-bold text-ink">Paytm</span>
                                 <span className="text-[9px] text-[#765442] mt-0.5">To Mobile</span>
-                              </button>
+                              </a>
                             </div>
                           </div>
 
@@ -806,8 +864,8 @@ export default function Checkout() {
                         </div>
 
                         {/* Primary Universal Button */}
-                        <button
-                          type="button"
+                        <a
+                          href={getAppLaunchLink("Universal", "intent")}
                           onClick={() => launchUpiApp("Universal", "intent")}
                           className="w-full rounded-2xl bg-gradient-to-r from-clay to-[#6e4630] p-3.5 sm:p-4 text-white hover:opacity-95 transition shadow-md flex items-center justify-between cursor-pointer"
                         >
@@ -827,24 +885,24 @@ export default function Checkout() {
                           <span className="text-xs font-bold bg-white/20 rounded-xl px-2.5 py-1 shrink-0">
                             Pay →
                           </span>
-                        </button>
+                        </a>
 
                         <div className="grid grid-cols-3 gap-2 sm:gap-3">
-                          <button
-                            type="button"
+                          <a
+                            href={getAppLaunchLink("PhonePe", "intent")}
                             onClick={() => launchUpiApp("PhonePe", "intent")}
-                            className="flex flex-col items-center justify-center rounded-2xl border border-[#8a614820] bg-white p-2.5 sm:p-3 hover:border-clay hover:shadow-xs transition cursor-pointer group"
+                            className="flex flex-col items-center justify-center rounded-2xl border border-[#8a614820] bg-white p-2.5 sm:p-3 hover:border-clay hover:shadow-xs transition cursor-pointer group text-center"
                           >
                             <div className="h-9 w-9 rounded-xl bg-[#5f259f] flex items-center justify-center text-white font-bold text-sm shadow-2xs mb-1 group-hover:scale-105 transition-transform">
                               पे
                             </div>
                             <span className="text-xs font-bold text-ink">PhonePe</span>
-                          </button>
+                          </a>
 
-                          <button
-                            type="button"
+                          <a
+                            href={getAppLaunchLink("Google Pay", "intent")}
                             onClick={() => launchUpiApp("Google Pay", "intent")}
-                            className="flex flex-col items-center justify-center rounded-2xl border border-[#8a614820] bg-white p-2.5 sm:p-3 hover:border-clay hover:shadow-xs transition cursor-pointer group"
+                            className="flex flex-col items-center justify-center rounded-2xl border border-[#8a614820] bg-white p-2.5 sm:p-3 hover:border-clay hover:shadow-xs transition cursor-pointer group text-center"
                           >
                             <div className="h-9 w-9 rounded-xl bg-white border border-gray-100 flex items-center justify-center shadow-2xs mb-1 group-hover:scale-105 transition-transform">
                               <svg className="w-5 h-5" viewBox="0 0 24 24">
@@ -867,18 +925,18 @@ export default function Checkout() {
                               </svg>
                             </div>
                             <span className="text-xs font-bold text-ink">GPay</span>
-                          </button>
+                          </a>
 
-                          <button
-                            type="button"
+                          <a
+                            href={getAppLaunchLink("Paytm", "intent")}
                             onClick={() => launchUpiApp("Paytm", "intent")}
-                            className="flex flex-col items-center justify-center rounded-2xl border border-[#8a614820] bg-white p-2.5 sm:p-3 hover:border-clay hover:shadow-xs transition cursor-pointer group"
+                            className="flex flex-col items-center justify-center rounded-2xl border border-[#8a614820] bg-white p-2.5 sm:p-3 hover:border-clay hover:shadow-xs transition cursor-pointer group text-center"
                           >
                             <div className="h-9 w-9 rounded-xl bg-[#002970] flex items-center justify-center text-[#00b9f5] font-extrabold text-[10px] tracking-tight shadow-2xs mb-1 group-hover:scale-105 transition-transform">
                               Paytm
                             </div>
                             <span className="text-xs font-bold text-ink">Paytm</span>
-                          </button>
+                          </a>
                         </div>
                       </div>
                     )}
