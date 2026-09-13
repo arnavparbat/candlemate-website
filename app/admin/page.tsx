@@ -582,7 +582,7 @@ export default function Admin() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {newOrderAlert.screenshot && !newOrderAlert.screenshot.startsWith("PHONEPE_") && (
+              {newOrderAlert.screenshot && !newOrderAlert.screenshot.startsWith("PHONEPE_") && !newOrderAlert.screenshot.startsWith("CASHFREE_") && (
                 <button
                   type="button"
                   onClick={() => setSelectedScreenshotOrder(newOrderAlert)}
@@ -590,6 +590,11 @@ export default function Admin() {
                 >
                   View Payment Proof
                 </button>
+              )}
+              {(newOrderAlert.screenshot?.startsWith("CASHFREE_") || newOrderAlert.paymentMethod === "Cashfree Gateway") && (
+                <span className="inline-flex items-center gap-1 rounded-xl bg-blue-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm">
+                  ⚡ Cashfree Auto-Verified
+                </span>
               )}
               {newOrderAlert.screenshot?.startsWith("PHONEPE_") && (
                 <span className="inline-flex items-center gap-1 rounded-xl bg-purple-700 px-3 py-1.5 text-xs font-bold text-white shadow-sm">
@@ -667,7 +672,35 @@ export default function Admin() {
                     </td>
                     <td>₹{o.total}</td>
                     <td>
-                      {o.paymentMethod === "PhonePe Gateway" || (o.screenshot && o.screenshot.startsWith("PHONEPE_")) ? (
+                      {o.paymentMethod === "Cashfree Gateway" || (o.screenshot && o.screenshot.startsWith("CASHFREE_")) ? (
+                        <div className="flex flex-col gap-1 py-1">
+                          {o.paymentStatus === "FAILED" || o.status === "Payment Failed" ? (
+                            <span className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-700 shadow-2xs">
+                              <span className="h-2 w-2 rounded-full bg-rose-500" />
+                              Cashfree Failed
+                            </span>
+                          ) : o.paymentStatus === "PENDING" || o.status === "Payment Pending" ? (
+                            <span className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-700 shadow-2xs">
+                              <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                              Cashfree Pending
+                            </span>
+                          ) : (
+                            <div className="inline-flex flex-col gap-1 rounded-xl border border-blue-200 bg-blue-50/90 p-2 text-xs shadow-2xs">
+                              <div className="flex items-center gap-1.5 font-bold text-blue-900">
+                                <span className="flex h-2 w-2 relative">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                                  <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-600"></span>
+                                </span>
+                                <span>⚡ Cashfree Verified ✓</span>
+                              </div>
+                              <div className="text-[10px] text-blue-800 font-mono break-all select-all">
+                                {o.transactionId || o.cashfreePaymentId || (o.screenshot?.includes(":") ? o.screenshot.split(":")[1] : "CF-VERIFIED")}
+                              </div>
+                              <span className="text-[9px] text-blue-600 font-medium">Gateway S2S Confirmed</span>
+                            </div>
+                          )}
+                        </div>
+                      ) : o.paymentMethod === "PhonePe Gateway" || (o.screenshot && o.screenshot.startsWith("PHONEPE_")) ? (
                         <div className="flex flex-col gap-1 py-1">
                           {o.paymentStatus === "FAILED" || o.status === "Payment Failed" ? (
                             <span className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-700 shadow-2xs">

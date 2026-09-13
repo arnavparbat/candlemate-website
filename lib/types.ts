@@ -11,6 +11,8 @@ export type Order = {
   paymentStatus?: "PENDING" | "SUCCESS" | "FAILED";
   transactionId?: string;
   phonepeTransactionId?: string;
+  cashfreeOrderId?: string;
+  cashfreePaymentId?: string;
   paidAt?: string;
   screenshot?: string;
   screenshotExpired?: boolean;

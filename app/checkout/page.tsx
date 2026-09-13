@@ -7,6 +7,7 @@ import { QRCodeCanvas, QRCodeSVG } from "qrcode.react";
 import { FormEvent, useEffect, useState, useRef } from "react";
 import { uploadScreenshotToSupabase, isSupabaseConfigured } from "@/lib/supabase";
 import Link from "next/link";
+import Script from "next/script";
 
 type Phase = "details" | "pay" | "burning" | "done";
 
@@ -29,9 +30,9 @@ export default function Checkout() {
     transactionId?: string;
   } | null>(null);
 
-  // PhonePe Payment Gateway states
-  const [phonepeLoading, setPhonepeLoading] = useState(false);
-  const [phonepeError, setPhonepeError] = useState("");
+  // Cashfree Payment Gateway states
+  const [cashfreeLoading, setCashfreeLoading] = useState(false);
+  const [cashfreeError, setCashfreeError] = useState("");
 
   // Payment feedback and state
   const [payHint, setPayHint] = useState<string>("");
@@ -58,43 +59,94 @@ export default function Checkout() {
       else setDeviceType("other");
     }
 
-    // Auto-detect return from PhonePe Payment Gateway
+    // Auto-detect return from Cashfree Payment Gateway (if redirected or returned from app switch)
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
-      const orderIdParam = params.get("orderId");
-      const statusParam = params.get("status");
+      const cfOrderId = params.get("order_id") || params.get("orderId");
 
-      if (orderIdParam && statusParam === "success") {
+      if (cfOrderId) {
         setPhase("burning");
-        fetch(`/api/payment/phonepe/status?orderId=${encodeURIComponent(orderIdParam)}`)
+        fetch(`/api/payment/cashfree/verify?orderId=${encodeURIComponent(cfOrderId)}`)
           .then((r) => r.json())
           .then((data) => {
-            if (data.order) {
+            if (data.verified && data.order) {
               setPlacedOrder({
                 id: data.order.id,
                 customer: data.order.customer,
                 items: data.order.items || [],
                 total: Number(data.order.total),
-                paymentMethod: data.order.paymentMethod || "PhonePe Gateway",
-                transactionId: data.order.transactionId,
+                paymentMethod: data.order.paymentMethod || "Cashfree Gateway",
+                transactionId: data.order.transactionId || data.order.cashfreePaymentId,
               });
               setOrder(data.order);
               clear();
               setTimeout(() => setPhase("done"), 2200);
+            } else {
+              setError("⚠️ Payment was not completed or is pending. You can retry or choose an alternative payment option below.");
+              setPhase("pay");
             }
           })
           .catch(() => {
             clear();
             setPhase("done");
           });
-      } else if (statusParam === "failed" || statusParam === "error") {
-        setError("⚠️ PhonePe payment was cancelled or could not be completed. You can retry or choose an alternative payment option below.");
-        setPhase("pay");
       }
     }
   }, []);
 
-  async function payWithPhonePe(overrideForm?: { name: string; address: string; phone: string }) {
+  function loadCashfreeSDK(): Promise<any> {
+    return new Promise((resolve, reject) => {
+      if ((window as any).Cashfree) {
+        resolve((window as any).Cashfree);
+        return;
+      }
+      const existing = document.getElementById("cashfree-sdk-v3") as HTMLScriptElement | null;
+      if (existing) {
+        existing.addEventListener("load", () => resolve((window as any).Cashfree));
+        existing.addEventListener("error", reject);
+        return;
+      }
+      const script = document.createElement("script");
+      script.id = "cashfree-sdk-v3";
+      script.src = "https://sdk.cashfree.com/js/v3/cashfree.js";
+      script.async = true;
+      script.onload = () => resolve((window as any).Cashfree);
+      script.onerror = () => reject(new Error("Unable to load Cashfree checkout SDK."));
+      document.body.appendChild(script);
+    });
+  }
+
+  async function verifyCashfreePayment(orderId: string) {
+    try {
+      const res = await fetch(`/api/payment/cashfree/verify?orderId=${encodeURIComponent(orderId)}`);
+      const data = await res.json();
+      if (data.verified && data.order) {
+        setPlacedOrder({
+          id: data.order.id,
+          customer: data.order.customer,
+          items: data.order.items || items,
+          total: Number(data.order.total),
+          paymentMethod: "Cashfree Gateway",
+          transactionId: data.order.transactionId || data.order.cashfreePaymentId,
+        });
+        setOrder(data.order);
+        clear();
+        setTimeout(() => setPhase("done"), 2200);
+        return true;
+      } else {
+        setCashfreeError("Payment was not completed. You can retry or choose an alternative payment option below.");
+        setPhase("pay");
+        return false;
+      }
+    } catch (err: any) {
+      console.error("Verification error:", err);
+      setCashfreeError("Could not verify payment status immediately. Please check order status or contact support.");
+      setPhase("pay");
+      return false;
+    }
+  }
+
+  async function payWithCashfree(overrideForm?: { name: string; address: string; phone: string }) {
     const activeForm = overrideForm || form;
     if (!items.length) {
       setError("Your bag is empty.");
@@ -106,11 +158,12 @@ export default function Checkout() {
     }
 
     setError("");
-    setPhonepeError("");
-    setPhonepeLoading(true);
+    setCashfreeError("");
+    setCashfreeLoading(true);
 
     try {
-      const res = await fetch("/api/payment/phonepe/initiate", {
+      // 1. Create order on backend
+      const res = await fetch("/api/payment/cashfree/create-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -120,16 +173,37 @@ export default function Checkout() {
       });
 
       const data = await res.json();
-      if (!res.ok || !data.success || !data.redirectUrl) {
-        throw new Error(data.error || "Could not start PhonePe payment session. Please try again.");
+      if (!res.ok || !data.success || !data.paymentSessionId) {
+        throw new Error(data.error || "Could not start Cashfree payment session. Please try again.");
       }
 
-      // 1-Click Auto-Launch: Redirect customer directly to PhonePe Gateway
-      window.location.href = data.redirectUrl;
+      // 2. Load Cashfree JS SDK
+      const CashfreeConstructor = await loadCashfreeSDK();
+      const cashfree = new CashfreeConstructor({
+        mode: data.environment === "production" ? "production" : "sandbox",
+      });
+
+      // 3. Launch In-Page Popup Modal Checkout!
+      setCashfreeLoading(false);
+      cashfree.checkout({
+        paymentSessionId: data.paymentSessionId,
+        redirectTarget: "_modal",
+      }).then(async (result: any) => {
+        if (result?.error) {
+          console.warn("Cashfree modal closed or error:", result.error);
+          setCashfreeError(result.error.message || "Payment modal was closed. You can retry anytime.");
+          setCashfreeLoading(false);
+          return;
+        }
+
+        // Modal closed/finished -> verify payment with backend
+        setPhase("burning");
+        await verifyCashfreePayment(data.orderId);
+      });
     } catch (err: any) {
-      console.error("[PhonePe Checkout] Initiation error:", err);
-      setPhonepeError(err.message || "Failed to initialize PhonePe payment.");
-      setPhonepeLoading(false);
+      console.error("[Cashfree Checkout] Initiation error:", err);
+      setCashfreeError(err.message || "Failed to initialize Cashfree payment.");
+      setCashfreeLoading(false);
     }
   }
 
@@ -401,13 +475,13 @@ export default function Checkout() {
   const displayPhone = placedOrder?.customer?.phone || form.phone;
   const displayAddress = placedOrder?.customer?.address || form.address;
 
-  const isPhonePePayment =
-    (placedOrder?.paymentMethod || order?.paymentMethod) === "PhonePe Gateway" ||
+  const isAutoPayment =
+    (placedOrder?.paymentMethod || order?.paymentMethod)?.includes("Gateway") ||
     Boolean(placedOrder?.transactionId || order?.transactionId);
 
-  const paymentProofLine = isPhonePePayment
-    ? `⚡ *Payment Status:* Verified automatically via PhonePe Gateway ✓ (Txn ID: ${
-        placedOrder?.transactionId || order?.transactionId || "PHONEPE-VERIFIED"
+  const paymentProofLine = isAutoPayment
+    ? `⚡ *Payment Status:* Verified automatically via Cashfree Gateway ✓ (Txn ID: ${
+        placedOrder?.transactionId || order?.transactionId || "CASHFREE-PAID"
       })`
     : `🖼️ *Payment Screenshot:* Uploaded on website ✓`;
 
@@ -635,25 +709,25 @@ export default function Checkout() {
                   )}
 
                   {/* ========================================================================= */}
-                  {/* ⚡ 1-CLICK AUTOMATED PHONEPE PAYMENT GATEWAY (RECOMMENDED) */}
+                  {/* ⚡ 1-CLICK CASHFREE PAYMENT GATEWAY (IN-PAGE POPUP MODAL - RECOMMENDED) */}
                   {/* ========================================================================= */}
-                  <div className="rounded-3xl border-2 border-[#5f259f]/40 bg-gradient-to-br from-[#5f259f]/8 via-white to-[#5f259f]/5 p-5 sm:p-6 shadow-md text-left">
+                  <div className="rounded-3xl border-2 border-[#0066FF]/40 bg-gradient-to-br from-[#0066FF]/8 via-white to-[#0066FF]/5 p-5 sm:p-6 shadow-md text-left">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-3">
-                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#5f259f] text-xl font-bold text-white shadow-sm">
-                          पे
+                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-[#0066FF] to-[#0040A8] text-xl font-bold text-white shadow-sm">
+                          ⚡
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="rounded-full bg-[#5f259f] px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-white">
+                            <span className="rounded-full bg-[#0066FF] px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-white">
                               ⚡ Recommended
                             </span>
                             <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                              ✓ Auto-Verified · No Screenshots
+                              ✓ Auto-Verified · Modal Popup
                             </span>
                           </div>
                           <h3 className="text-base sm:text-lg font-bold text-ink mt-0.5">
-                            PhonePe Payment Gateway
+                            Cashfree Instant Gateway
                           </h3>
                         </div>
                       </div>
@@ -664,37 +738,37 @@ export default function Checkout() {
                     </div>
 
                     <p className="mt-3 text-xs sm:text-sm text-[#765442] leading-relaxed">
-                      Pay instantly with <b>PhonePe, any UPI App, Debit/Credit Card, or Netbanking</b>. Payment is verified automatically by the gateway in seconds — <b>no manual QR scanning or screenshot upload needed</b>!
+                      Opens an <b>instant in-page checkout modal</b>. Pay securely with <b>UPI (Google Pay, PhonePe, Paytm, BHIM), Debit/Credit Cards, or Netbanking</b>. Verified automatically in seconds without leaving this page — <b>no screenshot needed</b>!
                     </p>
 
-                    {phonepeError && (
+                    {cashfreeError && (
                       <div className="mt-3 rounded-xl bg-red-50 p-3 text-xs text-red-700 border border-red-200">
-                        {phonepeError}
+                        {cashfreeError}
                       </div>
                     )}
 
                     <button
                       type="button"
-                      onClick={() => payWithPhonePe()}
-                      disabled={phonepeLoading}
-                      className="mt-4 flex w-full items-center justify-center gap-2.5 rounded-full bg-gradient-to-r from-[#5f259f] via-[#6d2ca8] to-[#5f259f] py-4 px-6 text-sm font-bold text-white shadow-lg hover:shadow-xl hover:opacity-95 transition disabled:opacity-75 cursor-pointer"
+                      onClick={() => payWithCashfree()}
+                      disabled={cashfreeLoading}
+                      className="mt-4 flex w-full items-center justify-center gap-2.5 rounded-full bg-gradient-to-r from-[#0066FF] via-[#0052CC] to-[#003B99] py-4 px-6 text-sm font-bold text-white shadow-lg hover:shadow-xl hover:opacity-95 transition disabled:opacity-75 cursor-pointer"
                     >
-                      {phonepeLoading ? (
+                      {cashfreeLoading ? (
                         <>
                           <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                          <span>Connecting to PhonePe Gateway...</span>
+                          <span>Opening Cashfree Secure Modal...</span>
                         </>
                       ) : (
                         <>
                           <span className="text-lg">⚡</span>
-                          <span>Pay ₹{total} with PhonePe (1-Click Auto Launch) →</span>
+                          <span>Pay ₹{total} with Cashfree (In-Page Popup) →</span>
                         </>
                       )}
                     </button>
 
                     <div className="mt-3 flex flex-wrap items-center justify-between text-[11px] text-[#765442]/80 gap-2">
-                      <span>🔒 Official PhonePe PG · Sandbox / UAT Live Ready</span>
-                      <span className="font-semibold text-[#5f259f]">Instant Studio Confirmation ✓</span>
+                      <span>🔒 Official Cashfree PG · 256-bit Secure</span>
+                      <span className="font-semibold text-[#0066FF]">Instant Studio Confirmation ✓</span>
                     </div>
                   </div>
 
@@ -1283,14 +1357,14 @@ export default function Checkout() {
                 <span className="display text-lg font-bold text-ink">₹{displayTotal}</span>
               </div>
 
-              {isPhonePePayment && (
-                <div className="mt-3 rounded-xl bg-purple-50 border border-purple-200 p-2.5 text-xs text-purple-900 flex items-center justify-between">
+              {isAutoPayment && (
+                <div className="mt-3 rounded-xl bg-blue-50 border border-blue-200 p-2.5 text-xs text-blue-900 flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
                     <span className="font-bold">⚡ Payment:</span>
-                    <span className="font-semibold text-emerald-800">PhonePe Gateway Verified ✓</span>
+                    <span className="font-semibold text-emerald-800">Cashfree Gateway Verified ✓</span>
                   </div>
                   {(placedOrder?.transactionId || order?.transactionId) && (
-                    <span className="text-[10px] font-mono text-purple-800 truncate max-w-[150px]">
+                    <span className="text-[10px] font-mono text-blue-800 truncate max-w-[150px]">
                       Txn: {placedOrder?.transactionId || order?.transactionId}
                     </span>
                   )}
@@ -1341,6 +1415,7 @@ export default function Checkout() {
           </div>
         )}
       </main>
+      <Script src="https://sdk.cashfree.com/js/v3/cashfree.js" id="cashfree-sdk-v3" strategy="afterInteractive" />
     </>
   );
 }
