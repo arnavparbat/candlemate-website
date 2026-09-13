@@ -62,6 +62,23 @@ export async function POST(req: Request) {
     }
 
     if (isConfirmedPaid) {
+      const screenshotProof = `CASHFREE_AUTO_VERIFIED:${cfPaymentId || "PAID"}`;
+
+      if (isSupabaseConfigured()) {
+        try {
+          await supabase
+            .from("orders")
+            .update({
+              screenshot: screenshotProof,
+              status: "Order Received",
+            })
+            .eq("id", orderId);
+          console.log(`[Cashfree Webhook] Successfully marked order ${orderId} as PAID in Supabase.`);
+        } catch (e: any) {
+          console.error("[Cashfree Webhook] Supabase sync error:", e.message);
+        }
+      }
+
       const db = getStore();
       const matchedOrder = db.orders.find((o) => o.id === orderId);
 
@@ -74,27 +91,12 @@ export async function POST(req: Request) {
         if (cfPaymentId) matchedOrder.cashfreePaymentId = cfPaymentId;
         matchedOrder.transactionId = cfPaymentId || matchedOrder.transactionId || "CASHFREE_PAID";
         matchedOrder.paidAt = matchedOrder.paidAt || new Date().toISOString();
-        matchedOrder.screenshot = `CASHFREE_AUTO_VERIFIED:${matchedOrder.transactionId}`;
+        matchedOrder.screenshot = screenshotProof;
 
         saveStore(db);
 
         if (wasPending) {
           notifyStudioNewOrder(matchedOrder);
-        }
-
-        if (isSupabaseConfigured()) {
-          try {
-            await updateOrderStatusInSupabase(matchedOrder.id, "Order Received");
-            await supabase
-              .from("orders")
-              .update({
-                screenshot: matchedOrder.screenshot,
-                status: "Order Received",
-              })
-              .eq("id", matchedOrder.id);
-          } catch (e: any) {
-            console.error("[Cashfree Webhook] Supabase sync error:", e.message);
-          }
         }
       }
     }

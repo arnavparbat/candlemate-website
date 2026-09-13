@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCashfreeOrder, getCashfreeOrderPayments } from "@/lib/cashfree";
 import { getStore, saveStore } from "@/lib/store";
-import { isSupabaseConfigured, updateOrderStatusInSupabase, supabase } from "@/lib/supabase";
+import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import { notifyStudioNewOrder } from "@/lib/order-events";
 import { Order } from "@/lib/types";
 
@@ -16,89 +16,136 @@ async function verifyOrder(orderId: string) {
 
   const successfulPayment = payments.find((p) => p.payment_status === "SUCCESS");
   const isPaid = cfOrder.order_status === "PAID" || !!successfulPayment;
-  const cfPaymentId = successfulPayment?.cf_payment_id ? String(successfulPayment.cf_payment_id) : "";
+  const cfPaymentId = successfulPayment?.cf_payment_id
+    ? String(successfulPayment.cf_payment_id)
+    : "";
 
-  // 2. Find and update the order in store
+  const screenshotProof = `CASHFREE_AUTO_VERIFIED:${cfPaymentId || "PAID"}`;
+
+  // 2. Fetch order from memory store OR Supabase
   const db = getStore();
-  const matchedOrder = db.orders.find((o) => o.id === orderId);
+  let matchedOrder: Order | undefined = db.orders.find((o) => o.id === orderId);
 
-  if (matchedOrder) {
-    if (isPaid) {
-      const wasPending = matchedOrder.paymentStatus !== "SUCCESS";
+  if (!matchedOrder && isSupabaseConfigured()) {
+    try {
+      const { data, error } = await supabase
+        .from("orders")
+        .select("*")
+        .eq("id", orderId)
+        .maybeSingle();
+
+      if (!error && data) {
+        matchedOrder = {
+          id: data.id,
+          customer: {
+            name: data.customer_name,
+            phone: data.customer_phone,
+            address: data.customer_address,
+          },
+          items: data.items || [],
+          total: Number(data.total),
+          status: data.status,
+          screenshot: data.screenshot,
+          createdAt: data.created_at,
+        };
+      }
+    } catch (err: any) {
+      console.warn("[Cashfree Verify] Supabase fetch fallback warning:", err.message);
+    }
+  }
+
+  if (isPaid) {
+    // 3. Immediately persist verified status to Supabase (ground truth cloud store)
+    if (isSupabaseConfigured()) {
+      try {
+        await supabase
+          .from("orders")
+          .update({
+            status: "Order Received",
+            screenshot: screenshotProof,
+          })
+          .eq("id", orderId);
+        console.log(`[Cashfree Verify] Successfully marked order ${orderId} as PAID in Supabase.`);
+      } catch (err: any) {
+        console.error("[Cashfree Verify] Error updating Supabase order status:", err.message);
+      }
+    }
+
+    if (matchedOrder) {
+      const wasPending = matchedOrder.paymentStatus !== "SUCCESS" && matchedOrder.status !== "Order Received";
       matchedOrder.status = "Order Received";
       matchedOrder.paymentStatus = "SUCCESS";
       matchedOrder.paymentMethod = "Cashfree Gateway";
       matchedOrder.cashfreeOrderId = cfOrder.cf_order_id;
-      matchedOrder.cashfreePaymentId = cfPaymentId || matchedOrder.cashfreePaymentId || "CASHFREE_PAID";
-      matchedOrder.transactionId = matchedOrder.cashfreePaymentId;
+      matchedOrder.cashfreePaymentId = cfPaymentId || "CASHFREE_PAID";
+      matchedOrder.transactionId = cfPaymentId || "CASHFREE_PAID";
       matchedOrder.paidAt = matchedOrder.paidAt || new Date().toISOString();
-      matchedOrder.screenshot = `CASHFREE_AUTO_VERIFIED:${matchedOrder.cashfreePaymentId}`;
+      matchedOrder.screenshot = screenshotProof;
 
       saveStore(db);
 
-      // Notify studio dashboard in real-time via SSE if newly verified
       if (wasPending) {
         notifyStudioNewOrder(matchedOrder);
       }
-
-      // Sync with Supabase
-      if (isSupabaseConfigured()) {
-        try {
-          await updateOrderStatusInSupabase(matchedOrder.id, "Order Received");
-          await supabase
-            .from("orders")
-            .update({
-              screenshot: matchedOrder.screenshot,
-              status: "Order Received",
-            })
-            .eq("id", matchedOrder.id);
-        } catch (e: any) {
-          console.error("[Cashfree Verify] Supabase sync error:", e.message);
-        }
-      }
-
-      return {
-        success: true,
-        verified: true,
-        status: "PAID",
-        orderId: matchedOrder.id,
-        paymentId: matchedOrder.cashfreePaymentId,
-        order: matchedOrder,
-      };
-    } else if (cfOrder.order_status === "EXPIRED" || cfOrder.order_status === "TERMINATED") {
-      matchedOrder.status = "Payment Failed";
-      matchedOrder.paymentStatus = "FAILED";
-      saveStore(db);
-
-      if (isSupabaseConfigured()) {
-        try {
-          await updateOrderStatusInSupabase(matchedOrder.id, "Payment Failed");
-        } catch {}
-      }
-
-      return {
-        success: true,
-        verified: false,
-        status: cfOrder.order_status,
-        orderId: matchedOrder.id,
-        order: matchedOrder,
+    } else {
+      matchedOrder = {
+        id: orderId,
+        customer: {
+          name: cfOrder.customer_details?.customer_name || "Customer",
+          phone: cfOrder.customer_details?.customer_phone || "",
+          address: "",
+        },
+        items: [],
+        total: Number(cfOrder.order_amount) || 0,
+        status: "Order Received",
+        paymentMethod: "Cashfree Gateway",
+        paymentStatus: "SUCCESS",
+        cashfreeOrderId: cfOrder.cf_order_id,
+        cashfreePaymentId: cfPaymentId || "CASHFREE_PAID",
+        transactionId: cfPaymentId || "CASHFREE_PAID",
+        screenshot: screenshotProof,
+        createdAt: new Date().toISOString(),
       };
     }
 
     return {
       success: true,
+      verified: true,
+      status: "PAID",
+      orderId,
+      paymentId: cfPaymentId || "CASHFREE_PAID",
+      order: matchedOrder,
+    };
+  } else if (cfOrder.order_status === "EXPIRED" || cfOrder.order_status === "TERMINATED") {
+    if (matchedOrder) {
+      matchedOrder.status = "Payment Failed";
+      matchedOrder.paymentStatus = "FAILED";
+      saveStore(db);
+    }
+    if (isSupabaseConfigured()) {
+      try {
+        await supabase
+          .from("orders")
+          .update({ status: "Payment Failed" })
+          .eq("id", orderId);
+      } catch {}
+    }
+
+    return {
+      success: true,
       verified: false,
-      status: cfOrder.order_status, // "ACTIVE"
-      orderId: matchedOrder.id,
+      status: cfOrder.order_status,
+      orderId,
       order: matchedOrder,
     };
   }
 
   return {
     success: true,
-    verified: isPaid,
-    status: cfOrder.order_status,
+    verified: false,
+    status: cfOrder.order_status, // "ACTIVE"
     orderId,
+    order: matchedOrder,
   };
 }
 

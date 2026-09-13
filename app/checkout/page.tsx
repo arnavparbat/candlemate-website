@@ -33,6 +33,8 @@ export default function Checkout() {
   // Cashfree Payment Gateway states
   const [cashfreeLoading, setCashfreeLoading] = useState(false);
   const [cashfreeError, setCashfreeError] = useState("");
+  const [lastCashfreeOrderId, setLastCashfreeOrderId] = useState<string>("");
+  const pendingOrderIdRef = useRef<string>("");
 
   // Payment feedback and state
   const [payHint, setPayHint] = useState<string>("");
@@ -66,33 +68,34 @@ export default function Checkout() {
 
       if (cfOrderId) {
         setPhase("burning");
-        fetch(`/api/payment/cashfree/verify?orderId=${encodeURIComponent(cfOrderId)}`)
-          .then((r) => r.json())
-          .then((data) => {
-            if (data.verified && data.order) {
-              setPlacedOrder({
-                id: data.order.id,
-                customer: data.order.customer,
-                items: data.order.items || [],
-                total: Number(data.order.total),
-                paymentMethod: data.order.paymentMethod || "Cashfree Gateway",
-                transactionId: data.order.transactionId || data.order.cashfreePaymentId,
-              });
-              setOrder(data.order);
-              clear();
-              setTimeout(() => setPhase("done"), 2200);
-            } else {
-              setError("⚠️ Payment was not completed or is pending. You can retry or choose an alternative payment option below.");
-              setPhase("pay");
-            }
-          })
-          .catch(() => {
-            clear();
-            setPhase("done");
-          });
+        verifyCashfreePayment(cfOrderId);
       }
     }
   }, []);
+
+  // iOS / Mobile app switch listener: when user returns from PhonePe/GPay to Safari
+  useEffect(() => {
+    function handleAppReturn() {
+      if (
+        document.visibilityState === "visible" &&
+        pendingOrderIdRef.current &&
+        phase === "pay"
+      ) {
+        console.log(
+          "[App Switch] Returned to checkout tab, verifying payment for:",
+          pendingOrderIdRef.current
+        );
+        verifyCashfreePayment(pendingOrderIdRef.current);
+      }
+    }
+
+    document.addEventListener("visibilitychange", handleAppReturn);
+    window.addEventListener("focus", handleAppReturn);
+    return () => {
+      document.removeEventListener("visibilitychange", handleAppReturn);
+      window.removeEventListener("focus", handleAppReturn);
+    };
+  }, [phase]);
 
   function loadCashfreeSDK(): Promise<any> {
     return new Promise((resolve, reject) => {
@@ -120,27 +123,40 @@ export default function Checkout() {
     try {
       const res = await fetch(`/api/payment/cashfree/verify?orderId=${encodeURIComponent(orderId)}`);
       const data = await res.json();
-      if (data.verified && data.order) {
-        setPlacedOrder({
-          id: data.order.id,
-          customer: data.order.customer,
-          items: data.order.items || items,
-          total: Number(data.order.total),
+      if (data.verified) {
+        const orderData = data.order || {
+          id: orderId,
+          customer: form,
+          items: items,
+          total: total,
           paymentMethod: "Cashfree Gateway",
-          transactionId: data.order.transactionId || data.order.cashfreePaymentId,
+          transactionId: data.paymentId || "CASHFREE_PAID",
+        };
+        setPlacedOrder({
+          id: orderData.id,
+          customer: orderData.customer,
+          items: orderData.items?.length ? orderData.items : items,
+          total: Number(orderData.total) || total,
+          paymentMethod: "Cashfree Gateway",
+          transactionId: orderData.transactionId || data.paymentId || "CASHFREE_PAID",
         });
-        setOrder(data.order);
+        setOrder(orderData);
         clear();
-        setTimeout(() => setPhase("done"), 2200);
+        pendingOrderIdRef.current = "";
+        setTimeout(() => setPhase("done"), 1200);
         return true;
       } else {
-        setCashfreeError("Payment was not completed. You can retry or choose an alternative payment option below.");
+        setCashfreeError(
+          "Payment is not confirmed yet. If you already completed payment in your UPI app, tap 'Confirm Payment' below to re-check."
+        );
         setPhase("pay");
         return false;
       }
     } catch (err: any) {
       console.error("Verification error:", err);
-      setCashfreeError("Could not verify payment status immediately. Please check order status or contact support.");
+      setCashfreeError(
+        "Could not verify payment status immediately. Please tap 'Confirm Payment' to check again."
+      );
       setPhase("pay");
       return false;
     }
@@ -177,6 +193,9 @@ export default function Checkout() {
         throw new Error(data.error || "Could not start Cashfree payment session. Please try again.");
       }
 
+      pendingOrderIdRef.current = data.orderId;
+      setLastCashfreeOrderId(data.orderId);
+
       // 2. Load Cashfree JS SDK
       const CashfreeConstructor = await loadCashfreeSDK();
       const cashfree = new CashfreeConstructor({
@@ -189,16 +208,15 @@ export default function Checkout() {
         paymentSessionId: data.paymentSessionId,
         redirectTarget: "_modal",
       }).then(async (result: any) => {
-        if (result?.error) {
-          console.warn("Cashfree modal closed or error:", result.error);
-          setCashfreeError(result.error.message || "Payment modal was closed. You can retry anytime.");
-          setCashfreeLoading(false);
-          return;
-        }
-
-        // Modal closed/finished -> verify payment with backend
+        // When modal finishes or is closed/dismissed after switching back from UPI app on iPhone:
         setPhase("burning");
-        await verifyCashfreePayment(data.orderId);
+        const verified = await verifyCashfreePayment(data.orderId);
+        if (!verified) {
+          if (result?.error) {
+            console.warn("Cashfree modal closed with error:", result.error);
+          }
+          setCashfreeLoading(false);
+        }
       });
     } catch (err: any) {
       console.error("[Cashfree Checkout] Initiation error:", err);
@@ -745,6 +763,19 @@ export default function Checkout() {
                       <div className="mt-3 rounded-xl bg-red-50 p-3 text-xs text-red-700 border border-red-200">
                         {cashfreeError}
                       </div>
+                    )}
+
+                    {lastCashfreeOrderId && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPhase("burning");
+                          verifyCashfreePayment(lastCashfreeOrderId);
+                        }}
+                        className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-emerald-600 bg-emerald-50 py-3 px-4 text-xs font-bold text-emerald-800 hover:bg-emerald-100 transition cursor-pointer shadow-xs"
+                      >
+                        <span>⚡ Already paid on PhonePe / GPay? Confirm Payment ({lastCashfreeOrderId})</span>
+                      </button>
                     )}
 
                     <button

@@ -50,6 +50,12 @@ export interface CashfreeOrderResponse {
   order_amount: number;
   order_status: "ACTIVE" | "PAID" | "EXPIRED" | "TERMINATED";
   payment_session_id: string;
+  customer_details?: {
+    customer_id?: string;
+    customer_name?: string;
+    customer_phone?: string;
+    customer_email?: string;
+  };
   order_expiry_time?: string;
   order_note?: string;
   message?: string;

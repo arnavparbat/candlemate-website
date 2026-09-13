@@ -201,21 +201,35 @@ export default function Admin() {
         .order("created_at", { ascending: false });
 
       if (!error && data) {
-        o = data.map((row: any): Order => ({
-          id: row.id,
-          customer: {
-            name: row.customer_name,
-            phone: row.customer_phone,
-            address: row.customer_address,
-          },
-          items: row.items || [],
-          total: Number(row.total),
-          status: row.status,
-          screenshot: row.screenshot,
-          screenshotExpired: !row.screenshot && Boolean(row.screenshot_expired),
-          screenshotExpiresAt: row.screenshot_expires_at,
-          createdAt: row.created_at,
-        }));
+        o = data.map((row: any): Order => {
+          const isCashfree = row.payment_method === "Cashfree Gateway" || row.screenshot?.startsWith("CASHFREE_");
+          const isPaid =
+            row.status === "Order Received" &&
+            (row.payment_status === "SUCCESS" || row.screenshot?.startsWith("CASHFREE_AUTO_VERIFIED"));
+          const cfPaymentId = row.screenshot?.startsWith("CASHFREE_AUTO_VERIFIED:")
+            ? row.screenshot.split(":")[1]
+            : undefined;
+
+          return {
+            id: row.id,
+            customer: {
+              name: row.customer_name,
+              phone: row.customer_phone,
+              address: row.customer_address,
+            },
+            items: row.items || [],
+            total: Number(row.total),
+            status: row.status,
+            screenshot: row.screenshot,
+            screenshotExpired: !row.screenshot && Boolean(row.screenshot_expired),
+            screenshotExpiresAt: row.screenshot_expires_at,
+            createdAt: row.created_at,
+            paymentMethod: isCashfree ? "Cashfree Gateway" : undefined,
+            paymentStatus: isPaid ? "SUCCESS" : row.status === "Payment Pending" ? "PENDING" : undefined,
+            cashfreePaymentId: cfPaymentId,
+            transactionId: cfPaymentId,
+          };
+        });
       } else {
         o = await fetch("/api/admin/orders").then((r) => r.json());
       }
@@ -230,6 +244,40 @@ export default function Admin() {
     setOrders(o);
     setProducts(p);
     setUpi(s.upiId);
+
+    // Background auto-reconciliation: Automatically re-check any pending Cashfree orders
+    if (Array.isArray(o)) {
+      const pendingCfOrders = o.filter(
+        (order) =>
+          (order.status === "Payment Pending" || order.paymentStatus === "PENDING") &&
+          (order.paymentMethod === "Cashfree Gateway" || order.screenshot?.startsWith("CASHFREE_"))
+      );
+      if (pendingCfOrders.length > 0) {
+        pendingCfOrders.forEach((pendingOrder) => {
+          fetch(`/api/payment/cashfree/verify?orderId=${encodeURIComponent(pendingOrder.id)}`)
+            .then((r) => r.json())
+            .then((res) => {
+              if (res.verified) {
+                setOrders((prev) =>
+                  prev.map((ord) =>
+                    ord.id === pendingOrder.id
+                      ? {
+                          ...ord,
+                          status: "Order Received",
+                          paymentStatus: "SUCCESS",
+                          screenshot: `CASHFREE_AUTO_VERIFIED:${res.paymentId || "PAID"}`,
+                          transactionId: res.paymentId || "PAID",
+                          cashfreePaymentId: res.paymentId || "PAID",
+                        }
+                      : ord
+                  )
+                );
+              }
+            })
+            .catch(() => {});
+        });
+      }
+    }
   }
 
   useEffect(() => {
@@ -389,6 +437,23 @@ export default function Admin() {
     });
     setNotice(`Updated order ${id} to "${newStatus}"`);
     load();
+  }
+
+  async function verifyGatewayOrder(orderId: string) {
+    setNotice(`Querying Cashfree API for order ${orderId}...`);
+    try {
+      const res = await fetch(`/api/payment/cashfree/verify?orderId=${encodeURIComponent(orderId)}`);
+      const data = await res.json();
+      if (data.verified) {
+        setNotice(`✓ Order ${orderId} is CONFIRMED PAID by Cashfree!`);
+        playOrderChime();
+        load();
+      } else {
+        setNotice(`Cashfree reports order ${orderId} status: ${data.status || "PENDING"}`);
+      }
+    } catch (err: any) {
+      setNotice(`Failed to check Cashfree: ${err.message}`);
+    }
   }
 
   async function handleDraftFiles(e: React.ChangeEvent<HTMLInputElement>) {
@@ -684,10 +749,20 @@ export default function Admin() {
                               Cashfree Failed
                             </span>
                           ) : o.paymentStatus === "PENDING" || o.status === "Payment Pending" ? (
-                            <span className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-700 shadow-2xs">
-                              <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
-                              Cashfree Pending
-                            </span>
+                            <div className="flex flex-col items-start gap-1">
+                              <span className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-700 shadow-2xs">
+                                <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                                Cashfree Pending
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => verifyGatewayOrder(o.id)}
+                                className="inline-flex items-center gap-1 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 px-2 py-0.5 text-[10px] font-bold transition cursor-pointer shadow-2xs"
+                                title="Query Cashfree API to verify if customer payment was completed"
+                              >
+                                🔄 Check Status
+                              </button>
+                            </div>
                           ) : (
                             <div className="inline-flex flex-col gap-1 rounded-xl border border-blue-200 bg-blue-50/90 p-2 text-xs shadow-2xs">
                               <div className="flex items-center gap-1.5 font-bold text-blue-900">
