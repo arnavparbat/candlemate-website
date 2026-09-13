@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { Order } from "./types";
+import { Order, Product } from "./types";
 
 const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const rawKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -138,6 +138,8 @@ export async function fetchOrdersFromSupabase(): Promise<Order[] | null> {
     const { data, error } = await supabase
       .from("orders")
       .select("*")
+      .neq("id", "__SYSTEM_STORE_PRODUCTS__")
+      .neq("status", "SYSTEM_INTERNAL")
       .neq("status", "Archived")
       .order("created_at", { ascending: false });
 
@@ -223,3 +225,72 @@ export async function deleteScreenshotFromSupabase(id: string): Promise<boolean>
     return false;
   }
 }
+
+/**
+ * Global Cloud Product Store: Fetch persistent products from Supabase
+ */
+export async function fetchProductsFromSupabase(): Promise<Product[] | null> {
+  if (!isSupabaseConfigured()) return null;
+
+  try {
+    // 1. Check if a dedicated 'products' table exists in PostgreSQL
+    const { data: tableData, error: tableErr } = await supabase
+      .from("products")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (!tableErr && Array.isArray(tableData) && tableData.length > 0) {
+      return tableData as Product[];
+    }
+
+    // 2. Fetch from the permanent cloud sync row in orders
+    const { data, error } = await supabase
+      .from("orders")
+      .select("items")
+      .eq("id", "__SYSTEM_STORE_PRODUCTS__")
+      .maybeSingle();
+
+    if (!error && data?.items && Array.isArray(data.items) && data.items.length > 0) {
+      return data.items as Product[];
+    }
+
+    return null;
+  } catch (err: any) {
+    console.warn("[Supabase DB] Could not fetch cloud products:", err.message);
+    return null;
+  }
+}
+
+/**
+ * Global Cloud Product Store: Persist products to Supabase so changes sync across PC and mobile instantly
+ */
+export async function saveProductsToSupabase(products: Product[]): Promise<boolean> {
+  if (!isSupabaseConfigured()) return false;
+
+  try {
+    const { error } = await supabase.from("orders").upsert([
+      {
+        id: "__SYSTEM_STORE_PRODUCTS__",
+        customer_name: "Candlemate Studio Inventory",
+        customer_phone: "0000000000",
+        customer_address: "Candlemate Cloud Inventory Store",
+        items: products,
+        total: 0,
+        status: "SYSTEM_INTERNAL",
+        created_at: new Date().toISOString(),
+      },
+    ]);
+
+    if (error) {
+      console.error("[Supabase DB] Error syncing products to cloud:", error.message);
+      return false;
+    }
+
+    console.log(`[Supabase DB] 🕯️ Successfully synced ${products.length} products to cloud store.`);
+    return true;
+  } catch (err: any) {
+    console.error("[Supabase DB] Unexpected error syncing products:", err.message);
+    return false;
+  }
+}
+

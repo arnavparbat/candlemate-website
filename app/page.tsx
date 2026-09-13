@@ -2,12 +2,22 @@ import { Header } from "@/components/header";
 import { ProductCard } from "@/components/product-card";
 import { Candle } from "@/components/candle";
 import { getStore } from "@/lib/store";
+import { isSupabaseConfigured, fetchProductsFromSupabase } from "@/lib/supabase";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
-export default function Home() {
-  const products = getStore().products;
+export default async function Home() {
+  let products = getStore().products;
+
+  if (isSupabaseConfigured()) {
+    try {
+      const cloudProducts = await fetchProductsFromSupabase();
+      if (cloudProducts && Array.isArray(cloudProducts) && cloudProducts.length > 0) {
+        products = cloudProducts;
+      }
+    } catch {}
+  }
 
   return (
     <>

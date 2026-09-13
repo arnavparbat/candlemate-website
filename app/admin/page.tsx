@@ -196,6 +196,8 @@ export default function Admin() {
       const { data, error } = await supabase
         .from("orders")
         .select("*")
+        .neq("id", "__SYSTEM_STORE_PRODUCTS__")
+        .neq("status", "SYSTEM_INTERNAL")
         .order("created_at", { ascending: false });
 
       if (!error && data) {
@@ -245,6 +247,7 @@ export default function Admin() {
             { event: "INSERT", schema: "public", table: "orders" },
             (payload) => {
               const row = payload.new;
+              if (row.id === "__SYSTEM_STORE_PRODUCTS__" || row.status === "SYSTEM_INTERNAL") return;
               const newOrder: Order = {
                 id: row.id,
                 customer: {
@@ -274,6 +277,7 @@ export default function Admin() {
             { event: "UPDATE", schema: "public", table: "orders" },
             (payload) => {
               const row = payload.new;
+              if (row.id === "__SYSTEM_STORE_PRODUCTS__" || row.status === "SYSTEM_INTERNAL") return;
               setOrders((prev) =>
                 prev.map((o) =>
                   o.id === row.id
