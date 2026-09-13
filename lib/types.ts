@@ -1,12 +1,17 @@
 export type Product = { id: string; name: string; price: number; description: string; burnTime: string; ingredients: string; category: string; images: string[]; available: boolean };
 export type CartItem = Product & { quantity: number };
-export type OrderStatus = "Order Received" | "Preparing" | "Out for Delivery" | "Delivered";
+export type OrderStatus = "Order Received" | "Preparing" | "Out for Delivery" | "Delivered" | "Payment Pending" | "Payment Failed";
 export type Order = {
   id: string;
   customer: { name: string; address: string; phone: string };
   items: CartItem[];
   total: number;
   status: OrderStatus;
+  paymentMethod?: string;
+  paymentStatus?: "PENDING" | "SUCCESS" | "FAILED";
+  transactionId?: string;
+  phonepeTransactionId?: string;
+  paidAt?: string;
   screenshot?: string;
   screenshotExpired?: boolean;
   screenshotExpiresAt?: string;

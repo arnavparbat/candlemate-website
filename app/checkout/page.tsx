@@ -25,7 +25,13 @@ export default function Checkout() {
     customer: { name: string; address: string; phone: string };
     items: Array<{ name: string; quantity: number; price: number }>;
     total: number;
+    paymentMethod?: string;
+    transactionId?: string;
   } | null>(null);
+
+  // PhonePe Payment Gateway states
+  const [phonepeLoading, setPhonepeLoading] = useState(false);
+  const [phonepeError, setPhonepeError] = useState("");
 
   // Payment feedback and state
   const [payHint, setPayHint] = useState<string>("");
@@ -51,7 +57,81 @@ export default function Checkout() {
       else if (/iPhone|iPad|iPod/i.test(ua)) setDeviceType("ios");
       else setDeviceType("other");
     }
+
+    // Auto-detect return from PhonePe Payment Gateway
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const orderIdParam = params.get("orderId");
+      const statusParam = params.get("status");
+
+      if (orderIdParam && statusParam === "success") {
+        setPhase("burning");
+        fetch(`/api/payment/phonepe/status?orderId=${encodeURIComponent(orderIdParam)}`)
+          .then((r) => r.json())
+          .then((data) => {
+            if (data.order) {
+              setPlacedOrder({
+                id: data.order.id,
+                customer: data.order.customer,
+                items: data.order.items || [],
+                total: Number(data.order.total),
+                paymentMethod: data.order.paymentMethod || "PhonePe Gateway",
+                transactionId: data.order.transactionId,
+              });
+              setOrder(data.order);
+              clear();
+              setTimeout(() => setPhase("done"), 2200);
+            }
+          })
+          .catch(() => {
+            clear();
+            setPhase("done");
+          });
+      } else if (statusParam === "failed" || statusParam === "error") {
+        setError("⚠️ PhonePe payment was cancelled or could not be completed. You can retry or choose an alternative payment option below.");
+        setPhase("pay");
+      }
+    }
   }, []);
+
+  async function payWithPhonePe(overrideForm?: { name: string; address: string; phone: string }) {
+    const activeForm = overrideForm || form;
+    if (!items.length) {
+      setError("Your bag is empty.");
+      return;
+    }
+    if (!activeForm.name || activeForm.address.length < 8 || !/^\+?[0-9\s-]{8,16}$/.test(activeForm.phone)) {
+      setError("Please enter your name, full address, and a valid contact number.");
+      return;
+    }
+
+    setError("");
+    setPhonepeError("");
+    setPhonepeLoading(true);
+
+    try {
+      const res = await fetch("/api/payment/phonepe/initiate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customer: activeForm,
+          items,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success || !data.redirectUrl) {
+        throw new Error(data.error || "Could not start PhonePe payment session. Please try again.");
+      }
+
+      // 1-Click Auto-Launch: Redirect customer directly to PhonePe Gateway
+      window.location.href = data.redirectUrl;
+    } catch (err: any) {
+      console.error("[PhonePe Checkout] Initiation error:", err);
+      setPhonepeError(err.message || "Failed to initialize PhonePe payment.");
+      setPhonepeLoading(false);
+    }
+  }
 
   // Standard NPCI formatted UPI URI (2 decimal places, clean payee & note)
   const formattedAmount = Number(total).toFixed(2);
@@ -321,6 +401,16 @@ export default function Checkout() {
   const displayPhone = placedOrder?.customer?.phone || form.phone;
   const displayAddress = placedOrder?.customer?.address || form.address;
 
+  const isPhonePePayment =
+    (placedOrder?.paymentMethod || order?.paymentMethod) === "PhonePe Gateway" ||
+    Boolean(placedOrder?.transactionId || order?.transactionId);
+
+  const paymentProofLine = isPhonePePayment
+    ? `⚡ *Payment Status:* Verified automatically via PhonePe Gateway ✓ (Txn ID: ${
+        placedOrder?.transactionId || order?.transactionId || "PHONEPE-VERIFIED"
+      })`
+    : `🖼️ *Payment Screenshot:* Uploaded on website ✓`;
+
   const whatsappMessage =
     `👋 *Hi Candlemate Studio!* I just placed an order on your website.\n\n` +
     `🧾 *Order ID:* ${displayId}\n` +
@@ -329,7 +419,7 @@ export default function Checkout() {
     `📍 *Delivery Address:*\n${displayAddress}\n\n` +
     `🕯️ *Ordered Candles:*\n${candleListText}\n\n` +
     `💰 *Order Total:* ₹${displayTotal}\n` +
-    `🖼️ *Payment Screenshot:* Uploaded on website ✓\n\n` +
+    `${paymentProofLine}\n\n` +
     `Please confirm my order and start crafting! ✨`;
 
   const whatsappUrl = `https://api.whatsapp.com/send?phone=${studioWhatsappNumber}&text=${encodeURIComponent(
@@ -543,6 +633,78 @@ export default function Checkout() {
                       </button>
                     </div>
                   )}
+
+                  {/* ========================================================================= */}
+                  {/* ⚡ 1-CLICK AUTOMATED PHONEPE PAYMENT GATEWAY (RECOMMENDED) */}
+                  {/* ========================================================================= */}
+                  <div className="rounded-3xl border-2 border-[#5f259f]/40 bg-gradient-to-br from-[#5f259f]/8 via-white to-[#5f259f]/5 p-5 sm:p-6 shadow-md text-left">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#5f259f] text-xl font-bold text-white shadow-sm">
+                          पे
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="rounded-full bg-[#5f259f] px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-white">
+                              ⚡ Recommended
+                            </span>
+                            <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                              ✓ Auto-Verified · No Screenshots
+                            </span>
+                          </div>
+                          <h3 className="text-base sm:text-lg font-bold text-ink mt-0.5">
+                            PhonePe Payment Gateway
+                          </h3>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-xs text-[#765442]">Payable</span>
+                        <p className="display text-2xl font-bold text-ink leading-tight">₹{total}</p>
+                      </div>
+                    </div>
+
+                    <p className="mt-3 text-xs sm:text-sm text-[#765442] leading-relaxed">
+                      Pay instantly with <b>PhonePe, any UPI App, Debit/Credit Card, or Netbanking</b>. Payment is verified automatically by the gateway in seconds — <b>no manual QR scanning or screenshot upload needed</b>!
+                    </p>
+
+                    {phonepeError && (
+                      <div className="mt-3 rounded-xl bg-red-50 p-3 text-xs text-red-700 border border-red-200">
+                        {phonepeError}
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => payWithPhonePe()}
+                      disabled={phonepeLoading}
+                      className="mt-4 flex w-full items-center justify-center gap-2.5 rounded-full bg-gradient-to-r from-[#5f259f] via-[#6d2ca8] to-[#5f259f] py-4 px-6 text-sm font-bold text-white shadow-lg hover:shadow-xl hover:opacity-95 transition disabled:opacity-75 cursor-pointer"
+                    >
+                      {phonepeLoading ? (
+                        <>
+                          <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                          <span>Connecting to PhonePe Gateway...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-lg">⚡</span>
+                          <span>Pay ₹{total} with PhonePe (1-Click Auto Launch) →</span>
+                        </>
+                      )}
+                    </button>
+
+                    <div className="mt-3 flex flex-wrap items-center justify-between text-[11px] text-[#765442]/80 gap-2">
+                      <span>🔒 Official PhonePe PG · Sandbox / UAT Live Ready</span>
+                      <span className="font-semibold text-[#5f259f]">Instant Studio Confirmation ✓</span>
+                    </div>
+                  </div>
+
+                  {/* Fallback Divider */}
+                  <div className="relative my-2 flex items-center justify-center">
+                    <div className="border-t border-[#8a614820] w-full" />
+                    <span className="bg-[#fffdf9] px-3 text-[11px] uppercase font-bold text-[#765442]/70 tracking-wider">
+                      Or Pay Manually via Studio UPI / QR (Screenshot Required)
+                    </span>
+                  </div>
 
                   {/* 1. Complete Payment Section with Method Switcher */}
                   <div className="paper rounded-3xl p-5 sm:p-7 shadow-sm bg-white/95 space-y-5">
@@ -1120,6 +1282,20 @@ export default function Checkout() {
                 <span className="font-semibold text-[#765442]">Total Paid:</span>
                 <span className="display text-lg font-bold text-ink">₹{displayTotal}</span>
               </div>
+
+              {isPhonePePayment && (
+                <div className="mt-3 rounded-xl bg-purple-50 border border-purple-200 p-2.5 text-xs text-purple-900 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold">⚡ Payment:</span>
+                    <span className="font-semibold text-emerald-800">PhonePe Gateway Verified ✓</span>
+                  </div>
+                  {(placedOrder?.transactionId || order?.transactionId) && (
+                    <span className="text-[10px] font-mono text-purple-800 truncate max-w-[150px]">
+                      Txn: {placedOrder?.transactionId || order?.transactionId}
+                    </span>
+                  )}
+                </div>
+              )}
 
               <p className="mt-3 text-xs text-[#765442] leading-relaxed">
                 We’ll message delivery updates to <b className="text-ink">{displayPhone}</b> as your candle is poured and packed.

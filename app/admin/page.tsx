@@ -6,6 +6,7 @@ import { supabase, getSupabase, isSupabaseConfigured } from "@/lib/supabase";
 import Link from "next/link";
 
 const statuses: OrderStatus[] = [
+  "Payment Pending",
   "Order Received",
   "Preparing",
   "Out for Delivery",
@@ -581,7 +582,7 @@ export default function Admin() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {newOrderAlert.screenshot && (
+              {newOrderAlert.screenshot && !newOrderAlert.screenshot.startsWith("PHONEPE_") && (
                 <button
                   type="button"
                   onClick={() => setSelectedScreenshotOrder(newOrderAlert)}
@@ -589,6 +590,11 @@ export default function Admin() {
                 >
                   View Payment Proof
                 </button>
+              )}
+              {newOrderAlert.screenshot?.startsWith("PHONEPE_") && (
+                <span className="inline-flex items-center gap-1 rounded-xl bg-purple-700 px-3 py-1.5 text-xs font-bold text-white shadow-sm">
+                  ⚡ PhonePe Auto-Verified
+                </span>
               )}
               <button
                 type="button"
@@ -661,7 +667,35 @@ export default function Admin() {
                     </td>
                     <td>₹{o.total}</td>
                     <td>
-                      {o.screenshot ? (
+                      {o.paymentMethod === "PhonePe Gateway" || (o.screenshot && o.screenshot.startsWith("PHONEPE_")) ? (
+                        <div className="flex flex-col gap-1 py-1">
+                          {o.paymentStatus === "FAILED" || o.status === "Payment Failed" ? (
+                            <span className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-700 shadow-2xs">
+                              <span className="h-2 w-2 rounded-full bg-rose-500" />
+                              PhonePe Failed
+                            </span>
+                          ) : o.paymentStatus === "PENDING" || o.status === "Payment Pending" ? (
+                            <span className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-700 shadow-2xs">
+                              <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                              PhonePe Pending
+                            </span>
+                          ) : (
+                            <div className="inline-flex flex-col gap-1 rounded-xl border border-purple-200 bg-purple-50/90 p-2 text-xs shadow-2xs">
+                              <div className="flex items-center gap-1.5 font-bold text-purple-900">
+                                <span className="flex h-2 w-2 relative">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
+                                  <span className="relative inline-flex rounded-full h-2 w-2 bg-purple-600"></span>
+                                </span>
+                                <span>⚡ PhonePe Verified ✓</span>
+                              </div>
+                              <div className="text-[10px] text-purple-700 font-mono break-all select-all">
+                                {o.transactionId || (o.screenshot?.includes(":") ? o.screenshot.split(":")[1] : o.phonepeTransactionId || "S2S Verified")}
+                              </div>
+                              <span className="text-[9px] text-purple-500 font-medium">Gateway S2S Confirmed</span>
+                            </div>
+                          )}
+                        </div>
+                      ) : o.screenshot ? (
                         <div className="flex flex-col gap-1 py-1">
                           <button
                             type="button"
@@ -716,6 +750,10 @@ export default function Admin() {
                               ? "bg-purple-50 text-purple-800 border-purple-300"
                               : o.status === "Preparing"
                               ? "bg-amber-50 text-amber-800 border-amber-300"
+                              : o.status === "Payment Pending"
+                              ? "bg-orange-50 text-orange-800 border-orange-300"
+                              : o.status === "Payment Failed"
+                              ? "bg-rose-50 text-rose-800 border-rose-300"
                               : "bg-sky-50 text-sky-800 border-sky-300"
                           }`}
                         >
@@ -727,6 +765,10 @@ export default function Admin() {
                                 ? "🚚 Out for Delivery"
                                 : s === "Preparing"
                                 ? "🕯️ Preparing"
+                                : s === "Payment Pending"
+                                ? "⏳ Payment Pending"
+                                : s === "Payment Failed"
+                                ? "✕ Payment Failed"
                                 : "📋 Order Received"}
                             </option>
                           ))}
