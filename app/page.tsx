@@ -1,6 +1,6 @@
 import { Header } from "@/components/header";
 import { ProductCollection } from "@/components/product-collection";
-import { Candle } from "@/components/candle";
+import { HeroCandle } from "@/components/hero-candle";
 import { getStore } from "@/lib/store";
 import { isSupabaseConfigured, fetchProductsFromSupabase } from "@/lib/supabase";
 import Link from "next/link";
@@ -56,15 +56,8 @@ export default async function Home() {
               </div>
             </div>
 
-            {/* Handcrafted Animated Candle Jar in Hero (Sleek and non-intrusive for mobile) */}
-            <div className="relative mx-auto flex items-center justify-center w-full max-w-[150px] sm:max-w-[280px]">
-              {/* Soft warm glow bloom behind jar */}
-              <div className="absolute -inset-2 sm:-inset-6 rounded-full bg-[#f8af3c]/25 blur-lg sm:blur-2xl -z-10 pointer-events-none" />
-              
-              <div className="py-0.5 sm:py-2">
-                <Candle stage="burning" compact={true} showBadge={false} />
-              </div>
-            </div>
+            {/* Real Aesthetic Lit Candle with atmospheric warm flame glow */}
+            <HeroCandle />
           </div>
         </section>
 
