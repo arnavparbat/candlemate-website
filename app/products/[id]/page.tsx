@@ -105,17 +105,35 @@ export default function ProductPage() {
             </p>
             <h1 className="display mt-3 text-5xl">{product.name}</h1>
             <p className="mt-5 text-2xl font-semibold text-clay">₹{product.price}</p>
-            <p className="mt-7 max-w-lg leading-7 text-[#765442]">{product.description}</p>
-            <dl className="my-8 grid grid-cols-2 gap-5 border-y border-[#5c39271a] py-6 text-sm">
-              <div>
-                <dt className="text-[#765442]">Burn time</dt>
-                <dd className="mt-1 font-medium text-ink">{product.burnTime}</dd>
-              </div>
-              <div>
-                <dt className="text-[#765442]">Made with</dt>
-                <dd className="mt-1 font-medium text-ink">{product.ingredients}</dd>
-              </div>
-            </dl>
+            {product.description && (
+              <p className="mt-6 max-w-lg leading-7 text-[#765442]">{product.description}</p>
+            )}
+
+            {(() => {
+              const activeSpecs = [
+                product.fragrance ? { label: "Fragrance", value: product.fragrance, icon: "🌸" } : null,
+                product.wickSize ? { label: "Wick Size", value: product.wickSize, icon: "🕯️" } : null,
+                product.candleDimensions ? { label: "Dimensions (L × B)", value: product.candleDimensions, icon: "📏" } : null,
+                product.burnTime ? { label: "Burn time", value: product.burnTime, icon: "⏳" } : null,
+                product.ingredients ? { label: "Made with", value: product.ingredients, icon: "🌿" } : null,
+              ].filter(Boolean) as { label: string; value: string; icon: string }[];
+
+              if (!activeSpecs.length) return null;
+
+              return (
+                <dl className="my-7 grid grid-cols-1 sm:grid-cols-2 gap-3.5 rounded-2xl border border-[#5c392718] bg-[#fffaf2] p-4 text-sm">
+                  {activeSpecs.map((spec, idx) => (
+                    <div key={idx} className="flex flex-col">
+                      <dt className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[#765442]">
+                        <span>{spec.icon}</span>
+                        <span>{spec.label}</span>
+                      </dt>
+                      <dd className="mt-0.5 text-sm font-semibold text-ink break-words">{spec.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              );
+            })()}
             <button
               type="button"
               disabled={!product.available}

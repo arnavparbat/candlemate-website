@@ -12,7 +12,6 @@ const statuses: OrderStatus[] = [
   "Out for Delivery",
   "Delivered",
 ];
-const fields = ["name", "price", "description", "burnTime", "ingredients", "category"];
 
 function fileToOptimizedDataUrl(file: File, maxDim = 1200, quality = 0.85): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -70,6 +69,9 @@ export default function Admin() {
     description: string;
     burnTime: string;
     ingredients: string;
+    wickSize: string;
+    candleDimensions: string;
+    fragrance: string;
     category: string;
     images: string[];
     available: boolean;
@@ -77,11 +79,29 @@ export default function Admin() {
     name: "",
     price: "",
     description: "",
-    burnTime: "30–35 hours",
-    ingredients: "Soy wax, cotton wick",
+    burnTime: "",
+    ingredients: "",
+    wickSize: "",
+    candleDimensions: "",
+    fragrance: "",
     category: "Jar candle",
     images: [],
     available: true,
+  });
+  const [editSpecsEnabled, setEditSpecsEnabled] = useState<{
+    wickSize: boolean;
+    candleDimensions: boolean;
+    fragrance: boolean;
+    burnTime: boolean;
+    ingredients: boolean;
+    description: boolean;
+  }>({
+    wickSize: false,
+    candleDimensions: false,
+    fragrance: false,
+    burnTime: false,
+    ingredients: false,
+    description: false,
   });
   const [isSavingProduct, setIsSavingProduct] = useState(false);
   const [editNewImageUrl, setEditNewImageUrl] = useState("");
@@ -204,15 +224,46 @@ export default function Admin() {
       setNotice("Failed to delete screenshot.");
     }
   }
-  const [draft, setDraft] = useState<any>({
+  const [draft, setDraft] = useState<{
+    name: string;
+    price: string | number;
+    category: string;
+    images: string;
+    available: boolean;
+    wickSize: string;
+    candleDimensions: string;
+    fragrance: string;
+    burnTime: string;
+    ingredients: string;
+    description: string;
+  }>({
     name: "",
     price: "",
-    description: "",
-    burnTime: "30–35 hours",
-    ingredients: "Soy wax, cotton wick",
     category: "Jar candle",
     images: "",
     available: true,
+    wickSize: "",
+    candleDimensions: "",
+    fragrance: "",
+    burnTime: "",
+    ingredients: "",
+    description: "",
+  });
+
+  const [draftSpecsEnabled, setDraftSpecsEnabled] = useState<{
+    wickSize: boolean;
+    candleDimensions: boolean;
+    fragrance: boolean;
+    burnTime: boolean;
+    ingredients: boolean;
+    description: boolean;
+  }>({
+    wickSize: false,
+    candleDimensions: false,
+    fragrance: false,
+    burnTime: false,
+    ingredients: false,
+    description: false,
   });
 
   async function load() {
@@ -508,6 +559,18 @@ export default function Admin() {
 
   async function add(e: React.FormEvent) {
     e.preventDefault();
+
+    if (!draft.name.trim()) {
+      setNotice("Please enter a candle name.");
+      return;
+    }
+
+    const numPrice = Number(draft.price);
+    if (isNaN(numPrice) || numPrice < 0) {
+      setNotice("Please enter a valid candle price in ₹.");
+      return;
+    }
+
     const urlImages = draft.images
       .split("\n")
       .map((s: string) => s.trim())
@@ -519,25 +582,70 @@ export default function Admin() {
       return;
     }
 
+    // Strict validation for ticked specifications: if ticked, MUST be filled!
+    if (draftSpecsEnabled.wickSize && !draft.wickSize.trim()) {
+      setNotice("Please fill in Wick Size or untick the checkbox to exclude it.");
+      return;
+    }
+    if (draftSpecsEnabled.candleDimensions && !draft.candleDimensions.trim()) {
+      setNotice("Please fill in Candle Length & Breadth or untick the checkbox to exclude it.");
+      return;
+    }
+    if (draftSpecsEnabled.fragrance && !draft.fragrance.trim()) {
+      setNotice("Please fill in Fragrance or untick the checkbox to exclude it.");
+      return;
+    }
+    if (draftSpecsEnabled.burnTime && !draft.burnTime.trim()) {
+      setNotice("Please fill in Burn Time or untick the checkbox to exclude it.");
+      return;
+    }
+    if (draftSpecsEnabled.ingredients && !draft.ingredients.trim()) {
+      setNotice("Please fill in Ingredients or untick the checkbox to exclude it.");
+      return;
+    }
+    if (draftSpecsEnabled.description && !draft.description.trim()) {
+      setNotice("Please fill in Description or untick the checkbox to exclude it.");
+      return;
+    }
+
     await fetch("/api/products", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        ...draft,
+        name: draft.name.trim(),
+        price: numPrice,
+        category: draft.category || "Jar candle",
+        available: draft.available !== false,
         images: finalImages,
-        price: Number(draft.price),
+        wickSize: draftSpecsEnabled.wickSize ? draft.wickSize.trim() : "",
+        candleDimensions: draftSpecsEnabled.candleDimensions ? draft.candleDimensions.trim() : "",
+        fragrance: draftSpecsEnabled.fragrance ? draft.fragrance.trim() : "",
+        burnTime: draftSpecsEnabled.burnTime ? draft.burnTime.trim() : "",
+        ingredients: draftSpecsEnabled.ingredients ? draft.ingredients.trim() : "",
+        description: draftSpecsEnabled.description ? draft.description.trim() : "",
       }),
     });
 
     setDraft({
       name: "",
       price: "",
-      description: "",
-      burnTime: "30–35 hours",
-      ingredients: "Soy wax, cotton wick",
       category: "Jar candle",
       images: "",
       available: true,
+      wickSize: "",
+      candleDimensions: "",
+      fragrance: "",
+      burnTime: "",
+      ingredients: "",
+      description: "",
+    });
+    setDraftSpecsEnabled({
+      wickSize: false,
+      candleDimensions: false,
+      fragrance: false,
+      burnTime: false,
+      ingredients: false,
+      description: false,
     });
     setUploadedPhotos([]);
     setNotice("Product added to the collection.");
@@ -546,15 +654,34 @@ export default function Admin() {
 
   function startEditingProduct(p: Product) {
     setEditingProduct(p);
+    const hasWick = Boolean(p.wickSize && p.wickSize.trim());
+    const hasDimensions = Boolean(p.candleDimensions && p.candleDimensions.trim());
+    const hasFragrance = Boolean(p.fragrance && p.fragrance.trim());
+    const hasBurnTime = Boolean(p.burnTime && p.burnTime.trim());
+    const hasIngredients = Boolean(p.ingredients && p.ingredients.trim());
+    const hasDescription = Boolean(p.description && p.description.trim());
+
+    setEditSpecsEnabled({
+      wickSize: hasWick,
+      candleDimensions: hasDimensions,
+      fragrance: hasFragrance,
+      burnTime: hasBurnTime,
+      ingredients: hasIngredients,
+      description: hasDescription,
+    });
+
     setEditForm({
       name: p.name || "",
       price: p.price ?? "",
-      description: p.description || "",
-      burnTime: p.burnTime || "30–35 hours",
-      ingredients: p.ingredients || "Soy wax, cotton wick",
       category: p.category || "Jar candle",
       images: Array.isArray(p.images) ? [...p.images] : [],
       available: p.available !== false,
+      wickSize: p.wickSize || "",
+      candleDimensions: p.candleDimensions || "",
+      fragrance: p.fragrance || "",
+      burnTime: p.burnTime || "",
+      ingredients: p.ingredients || "",
+      description: p.description || "",
     });
     setEditNewImageUrl("");
   }
@@ -641,6 +768,32 @@ export default function Admin() {
       return;
     }
 
+    // Strict validation for ticked specifications: if ticked, MUST be filled!
+    if (editSpecsEnabled.wickSize && !editForm.wickSize.trim()) {
+      setNotice("Please fill in Wick Size or untick the checkbox to exclude it.");
+      return;
+    }
+    if (editSpecsEnabled.candleDimensions && !editForm.candleDimensions.trim()) {
+      setNotice("Please fill in Candle Length & Breadth or untick the checkbox to exclude it.");
+      return;
+    }
+    if (editSpecsEnabled.fragrance && !editForm.fragrance.trim()) {
+      setNotice("Please fill in Fragrance or untick the checkbox to exclude it.");
+      return;
+    }
+    if (editSpecsEnabled.burnTime && !editForm.burnTime.trim()) {
+      setNotice("Please fill in Burn Time or untick the checkbox to exclude it.");
+      return;
+    }
+    if (editSpecsEnabled.ingredients && !editForm.ingredients.trim()) {
+      setNotice("Please fill in Ingredients or untick the checkbox to exclude it.");
+      return;
+    }
+    if (editSpecsEnabled.description && !editForm.description.trim()) {
+      setNotice("Please fill in Description or untick the checkbox to exclude it.");
+      return;
+    }
+
     setIsSavingProduct(true);
     setNotice(`Saving changes for "${editForm.name}"...`);
 
@@ -649,12 +802,15 @@ export default function Admin() {
         id: editingProduct.id,
         name: editForm.name.trim(),
         price: numPrice,
-        description: editForm.description.trim(),
-        burnTime: editForm.burnTime.trim(),
-        ingredients: editForm.ingredients.trim(),
         category: editForm.category.trim(),
         images: editForm.images,
         available: editForm.available,
+        wickSize: editSpecsEnabled.wickSize ? editForm.wickSize.trim() : "",
+        candleDimensions: editSpecsEnabled.candleDimensions ? editForm.candleDimensions.trim() : "",
+        fragrance: editSpecsEnabled.fragrance ? editForm.fragrance.trim() : "",
+        burnTime: editSpecsEnabled.burnTime ? editForm.burnTime.trim() : "",
+        ingredients: editSpecsEnabled.ingredients ? editForm.ingredients.trim() : "",
+        description: editSpecsEnabled.description ? editForm.description.trim() : "",
       };
 
       const res = await fetch(`/api/products/${encodeURIComponent(editingProduct.id)}`, {
@@ -1093,8 +1249,35 @@ export default function Admin() {
                         </span>
                       </div>
                       <p className="text-xs text-[#765442] mt-0.5">
-                        <span className="font-bold text-clay">₹{p.price}</span> · Burn time: {p.burnTime || "30–35h"}
+                        <span className="font-bold text-clay">₹{p.price}</span>
                       </p>
+                      <div className="mt-1.5 flex flex-wrap gap-1.5 text-[10px]">
+                        {p.fragrance && (
+                          <span className="inline-flex items-center gap-1 rounded-md bg-[#f4ece3] px-2 py-0.5 text-[#6c4832] font-medium">
+                            🌸 {p.fragrance}
+                          </span>
+                        )}
+                        {p.wickSize && (
+                          <span className="inline-flex items-center gap-1 rounded-md bg-[#f4ece3] px-2 py-0.5 text-[#6c4832] font-medium">
+                            🕯️ Wick: {p.wickSize}
+                          </span>
+                        )}
+                        {p.candleDimensions && (
+                          <span className="inline-flex items-center gap-1 rounded-md bg-[#f4ece3] px-2 py-0.5 text-[#6c4832] font-medium">
+                            📏 {p.candleDimensions}
+                          </span>
+                        )}
+                        {p.burnTime && (
+                          <span className="inline-flex items-center gap-1 rounded-md bg-[#f4ece3] px-2 py-0.5 text-[#6c4832] font-medium">
+                            ⏳ {p.burnTime}
+                          </span>
+                        )}
+                        {p.ingredients && (
+                          <span className="inline-flex items-center gap-1 rounded-md bg-[#f4ece3] px-2 py-0.5 text-[#6c4832] font-medium">
+                            🌿 {p.ingredients}
+                          </span>
+                        )}
+                      </div>
                       {p.description && (
                         <p className="text-xs text-[#765442]/80 line-clamp-1 mt-1">
                           {p.description}
@@ -1193,19 +1376,383 @@ export default function Admin() {
             {/* Add a candle Form */}
             <form onSubmit={add} className="mt-6 rounded-2xl border border-dashed border-[#a66a46] bg-[#fffaf2] p-5 shadow-sm">
               <h3 className="display text-2xl">Add a candle</h3>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                {fields.map((f) => (
-                  <label key={f} className="text-xs capitalize text-[#765442]">
-                    {f.replace(/([A-Z])/g, " $1")}
+              <div className="mt-4 grid gap-3.5 sm:grid-cols-3">
+                <label className="text-xs font-semibold uppercase tracking-wider text-[#765442]">
+                  Candle Name *
+                  <input
+                    required
+                    value={draft.name}
+                    type="text"
+                    placeholder="e.g. Amber & Sandalwood"
+                    onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                    className="mt-1 w-full rounded-xl border border-[#8a614830] bg-white p-2.5 text-sm text-ink outline-clay shadow-2xs font-medium"
+                  />
+                </label>
+                <label className="text-xs font-semibold uppercase tracking-wider text-[#765442]">
+                  Price (₹ INR) *
+                  <div className="relative mt-1">
+                    <span className="absolute left-3 top-2.5 text-sm font-bold text-[#765442]">₹</span>
                     <input
-                      required={f !== "ingredients"}
-                      value={draft[f]}
-                      type={f === "price" ? "number" : "text"}
-                      onChange={(e) => setDraft({ ...draft, [f]: e.target.value })}
-                      className="mt-1 w-full rounded-lg border bg-white p-2 text-sm text-ink outline-clay"
+                      required
+                      min="0"
+                      step="1"
+                      value={draft.price}
+                      type="number"
+                      placeholder="e.g. 649"
+                      onChange={(e) => setDraft({ ...draft, price: e.target.value })}
+                      className="w-full rounded-xl border border-[#8a614830] bg-white pl-8 pr-3 py-2.5 text-sm font-bold text-ink outline-clay shadow-2xs"
                     />
-                  </label>
-                ))}
+                  </div>
+                </label>
+                <label className="text-xs font-semibold uppercase tracking-wider text-[#765442]">
+                  Category *
+                  <select
+                    value={draft.category}
+                    onChange={(e) => setDraft({ ...draft, category: e.target.value })}
+                    className="mt-1 w-full rounded-xl border border-[#8a614830] bg-white p-2.5 text-sm text-ink outline-clay shadow-2xs"
+                  >
+                    <option value="Jar candle">Jar candle</option>
+                    <option value="Sculptural">Sculptural</option>
+                    <option value="Flower candle">Flower candle</option>
+                    <option value="Tin candle">Tin candle</option>
+                    <option value="Wax melts">Wax melts</option>
+                    <option value="Aromatherapy">Aromatherapy</option>
+                  </select>
+                </label>
+              </div>
+
+              {/* Removable / Tickable Specifications Section */}
+              <div className="mt-5 rounded-2xl border border-[#8a614825] bg-[#fff6eb]/60 p-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 border-b border-[#8a614815] pb-2.5 mb-3">
+                  <div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-ink flex items-center gap-1.5">
+                      <span>⚙️</span> Candle Specifications & Details (Tick to Include)
+                    </h4>
+                    <p className="text-[11px] text-[#765442] mt-0.5">
+                      Tick to include a detail for this candle. If ticked, it <b>must be filled</b>. If unticked, you cannot write in it and it won&apos;t appear on the store.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {/* 1. Wick Size (Wink size) */}
+                  <div
+                    className={`rounded-xl border p-3 transition-all ${
+                      draftSpecsEnabled.wickSize
+                        ? "border-emerald-300 bg-white shadow-2xs"
+                        : "border-stone-200 bg-stone-100/70"
+                    }`}
+                  >
+                    <label className="flex items-center justify-between cursor-pointer select-none">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={draftSpecsEnabled.wickSize}
+                          onChange={(e) =>
+                            setDraftSpecsEnabled((p) => ({ ...p, wickSize: e.target.checked }))
+                          }
+                          className="h-4 w-4 rounded accent-[#9b4a1b] cursor-pointer"
+                        />
+                        <span className="text-xs font-bold text-ink flex items-center gap-1.5">
+                          <span>🕯️</span> Wick Size <span className="text-[10px] font-normal text-[#765442]">(Wink size)</span>
+                        </span>
+                      </div>
+                      {draftSpecsEnabled.wickSize ? (
+                        <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                          ✓ Ticked (Must fill)
+                        </span>
+                      ) : (
+                        <span className="rounded-md bg-stone-200 px-2 py-0.5 text-[10px] font-medium text-stone-600">
+                          ✕ Unticked (Excluded)
+                        </span>
+                      )}
+                    </label>
+                    <div className="mt-2">
+                      <input
+                        type="text"
+                        disabled={!draftSpecsEnabled.wickSize}
+                        required={draftSpecsEnabled.wickSize}
+                        value={draftSpecsEnabled.wickSize ? draft.wickSize : ""}
+                        onChange={(e) => setDraft({ ...draft, wickSize: e.target.value })}
+                        placeholder={
+                          draftSpecsEnabled.wickSize
+                            ? "e.g. 24-ply braided cotton wick or Double wood wick (Required)"
+                            : "✕ Unticked - You cannot write here"
+                        }
+                        className={`w-full rounded-lg px-3 py-2 text-sm transition-all ${
+                          draftSpecsEnabled.wickSize
+                            ? "border border-[#8a614830] bg-white text-ink outline-clay"
+                            : "border border-dashed border-stone-300 bg-stone-100/90 text-stone-400 cursor-not-allowed select-none"
+                        }`}
+                      />
+                    </div>
+                  </div>
+
+                  {/* 2. Candle Length & Breadth (Dimensions) */}
+                  <div
+                    className={`rounded-xl border p-3 transition-all ${
+                      draftSpecsEnabled.candleDimensions
+                        ? "border-emerald-300 bg-white shadow-2xs"
+                        : "border-stone-200 bg-stone-100/70"
+                    }`}
+                  >
+                    <label className="flex items-center justify-between cursor-pointer select-none">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={draftSpecsEnabled.candleDimensions}
+                          onChange={(e) =>
+                            setDraftSpecsEnabled((p) => ({ ...p, candleDimensions: e.target.checked }))
+                          }
+                          className="h-4 w-4 rounded accent-[#9b4a1b] cursor-pointer"
+                        />
+                        <span className="text-xs font-bold text-ink flex items-center gap-1.5">
+                          <span>📏</span> Candle Length & Breadth <span className="text-[10px] font-normal text-[#765442]">(Dimensions)</span>
+                        </span>
+                      </div>
+                      {draftSpecsEnabled.candleDimensions ? (
+                        <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                          ✓ Ticked (Must fill)
+                        </span>
+                      ) : (
+                        <span className="rounded-md bg-stone-200 px-2 py-0.5 text-[10px] font-medium text-stone-600">
+                          ✕ Unticked (Excluded)
+                        </span>
+                      )}
+                    </label>
+                    <div className="mt-2">
+                      <input
+                        type="text"
+                        disabled={!draftSpecsEnabled.candleDimensions}
+                        required={draftSpecsEnabled.candleDimensions}
+                        value={draftSpecsEnabled.candleDimensions ? draft.candleDimensions : ""}
+                        onChange={(e) => setDraft({ ...draft, candleDimensions: e.target.value })}
+                        placeholder={
+                          draftSpecsEnabled.candleDimensions
+                            ? "e.g. 7.5 cm (L) × 7.5 cm (B) × 9 cm (H) (Required)"
+                            : "✕ Unticked - You cannot write here"
+                        }
+                        className={`w-full rounded-lg px-3 py-2 text-sm transition-all ${
+                          draftSpecsEnabled.candleDimensions
+                            ? "border border-[#8a614830] bg-white text-ink outline-clay"
+                            : "border border-dashed border-stone-300 bg-stone-100/90 text-stone-400 cursor-not-allowed select-none"
+                        }`}
+                      />
+                    </div>
+                  </div>
+
+                  {/* 3. Fragrance */}
+                  <div
+                    className={`rounded-xl border p-3 transition-all ${
+                      draftSpecsEnabled.fragrance
+                        ? "border-emerald-300 bg-white shadow-2xs"
+                        : "border-stone-200 bg-stone-100/70"
+                    }`}
+                  >
+                    <label className="flex items-center justify-between cursor-pointer select-none">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={draftSpecsEnabled.fragrance}
+                          onChange={(e) =>
+                            setDraftSpecsEnabled((p) => ({ ...p, fragrance: e.target.checked }))
+                          }
+                          className="h-4 w-4 rounded accent-[#9b4a1b] cursor-pointer"
+                        />
+                        <span className="text-xs font-bold text-ink flex items-center gap-1.5">
+                          <span>🌸</span> Fragrance <span className="text-[10px] font-normal text-[#765442]">(Scent notes)</span>
+                        </span>
+                      </div>
+                      {draftSpecsEnabled.fragrance ? (
+                        <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                          ✓ Ticked (Must fill)
+                        </span>
+                      ) : (
+                        <span className="rounded-md bg-stone-200 px-2 py-0.5 text-[10px] font-medium text-stone-600">
+                          ✕ Unticked (Excluded)
+                        </span>
+                      )}
+                    </label>
+                    <div className="mt-2">
+                      <input
+                        type="text"
+                        disabled={!draftSpecsEnabled.fragrance}
+                        required={draftSpecsEnabled.fragrance}
+                        value={draftSpecsEnabled.fragrance ? draft.fragrance : ""}
+                        onChange={(e) => setDraft({ ...draft, fragrance: e.target.value })}
+                        placeholder={
+                          draftSpecsEnabled.fragrance
+                            ? "e.g. French Vanilla, Lavender & Sandalwood (Required)"
+                            : "✕ Unticked - You cannot write here"
+                        }
+                        className={`w-full rounded-lg px-3 py-2 text-sm transition-all ${
+                          draftSpecsEnabled.fragrance
+                            ? "border border-[#8a614830] bg-white text-ink outline-clay"
+                            : "border border-dashed border-stone-300 bg-stone-100/90 text-stone-400 cursor-not-allowed select-none"
+                        }`}
+                      />
+                    </div>
+                  </div>
+
+                  {/* 4. Burn Time */}
+                  <div
+                    className={`rounded-xl border p-3 transition-all ${
+                      draftSpecsEnabled.burnTime
+                        ? "border-emerald-300 bg-white shadow-2xs"
+                        : "border-stone-200 bg-stone-100/70"
+                    }`}
+                  >
+                    <label className="flex items-center justify-between cursor-pointer select-none">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={draftSpecsEnabled.burnTime}
+                          onChange={(e) =>
+                            setDraftSpecsEnabled((p) => ({ ...p, burnTime: e.target.checked }))
+                          }
+                          className="h-4 w-4 rounded accent-[#9b4a1b] cursor-pointer"
+                        />
+                        <span className="text-xs font-bold text-ink flex items-center gap-1.5">
+                          <span>⏳</span> Burn Time <span className="text-[10px] font-normal text-[#765442]">(Hours)</span>
+                        </span>
+                      </div>
+                      {draftSpecsEnabled.burnTime ? (
+                        <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                          ✓ Ticked (Must fill)
+                        </span>
+                      ) : (
+                        <span className="rounded-md bg-stone-200 px-2 py-0.5 text-[10px] font-medium text-stone-600">
+                          ✕ Unticked (Excluded)
+                        </span>
+                      )}
+                    </label>
+                    <div className="mt-2">
+                      <input
+                        type="text"
+                        disabled={!draftSpecsEnabled.burnTime}
+                        required={draftSpecsEnabled.burnTime}
+                        value={draftSpecsEnabled.burnTime ? draft.burnTime : ""}
+                        onChange={(e) => setDraft({ ...draft, burnTime: e.target.value })}
+                        placeholder={
+                          draftSpecsEnabled.burnTime
+                            ? "e.g. 35–40 hours (Required)"
+                            : "✕ Unticked - You cannot write here"
+                        }
+                        className={`w-full rounded-lg px-3 py-2 text-sm transition-all ${
+                          draftSpecsEnabled.burnTime
+                            ? "border border-[#8a614830] bg-white text-ink outline-clay"
+                            : "border border-dashed border-stone-300 bg-stone-100/90 text-stone-400 cursor-not-allowed select-none"
+                        }`}
+                      />
+                    </div>
+                  </div>
+
+                  {/* 5. Ingredients */}
+                  <div
+                    className={`rounded-xl border p-3 transition-all ${
+                      draftSpecsEnabled.ingredients
+                        ? "border-emerald-300 bg-white shadow-2xs"
+                        : "border-stone-200 bg-stone-100/70"
+                    }`}
+                  >
+                    <label className="flex items-center justify-between cursor-pointer select-none">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={draftSpecsEnabled.ingredients}
+                          onChange={(e) =>
+                            setDraftSpecsEnabled((p) => ({ ...p, ingredients: e.target.checked }))
+                          }
+                          className="h-4 w-4 rounded accent-[#9b4a1b] cursor-pointer"
+                        />
+                        <span className="text-xs font-bold text-ink flex items-center gap-1.5">
+                          <span>🌿</span> Ingredients <span className="text-[10px] font-normal text-[#765442]">(Made with)</span>
+                        </span>
+                      </div>
+                      {draftSpecsEnabled.ingredients ? (
+                        <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                          ✓ Ticked (Must fill)
+                        </span>
+                      ) : (
+                        <span className="rounded-md bg-stone-200 px-2 py-0.5 text-[10px] font-medium text-stone-600">
+                          ✕ Unticked (Excluded)
+                        </span>
+                      )}
+                    </label>
+                    <div className="mt-2">
+                      <input
+                        type="text"
+                        disabled={!draftSpecsEnabled.ingredients}
+                        required={draftSpecsEnabled.ingredients}
+                        value={draftSpecsEnabled.ingredients ? draft.ingredients : ""}
+                        onChange={(e) => setDraft({ ...draft, ingredients: e.target.value })}
+                        placeholder={
+                          draftSpecsEnabled.ingredients
+                            ? "e.g. 100% Pure Soy Wax, Organic Essential Oils (Required)"
+                            : "✕ Unticked - You cannot write here"
+                        }
+                        className={`w-full rounded-lg px-3 py-2 text-sm transition-all ${
+                          draftSpecsEnabled.ingredients
+                            ? "border border-[#8a614830] bg-white text-ink outline-clay"
+                            : "border border-dashed border-stone-300 bg-stone-100/90 text-stone-400 cursor-not-allowed select-none"
+                        }`}
+                      />
+                    </div>
+                  </div>
+
+                  {/* 6. Description */}
+                  <div
+                    className={`rounded-xl border p-3 transition-all ${
+                      draftSpecsEnabled.description
+                        ? "border-emerald-300 bg-white shadow-2xs"
+                        : "border-stone-200 bg-stone-100/70"
+                    }`}
+                  >
+                    <label className="flex items-center justify-between cursor-pointer select-none">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={draftSpecsEnabled.description}
+                          onChange={(e) =>
+                            setDraftSpecsEnabled((p) => ({ ...p, description: e.target.checked }))
+                          }
+                          className="h-4 w-4 rounded accent-[#9b4a1b] cursor-pointer"
+                        />
+                        <span className="text-xs font-bold text-ink flex items-center gap-1.5">
+                          <span>📝</span> Description & Story <span className="text-[10px] font-normal text-[#765442]">(Scent & mood)</span>
+                        </span>
+                      </div>
+                      {draftSpecsEnabled.description ? (
+                        <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                          ✓ Ticked (Must fill)
+                        </span>
+                      ) : (
+                        <span className="rounded-md bg-stone-200 px-2 py-0.5 text-[10px] font-medium text-stone-600">
+                          ✕ Unticked (Excluded)
+                        </span>
+                      )}
+                    </label>
+                    <div className="mt-2">
+                      <textarea
+                        rows={2}
+                        disabled={!draftSpecsEnabled.description}
+                        required={draftSpecsEnabled.description}
+                        value={draftSpecsEnabled.description ? draft.description : ""}
+                        onChange={(e) => setDraft({ ...draft, description: e.target.value })}
+                        placeholder={
+                          draftSpecsEnabled.description
+                            ? "Write evocative notes about this candle's scent, feel, and mood... (Required)"
+                            : "✕ Unticked - You cannot write here"
+                        }
+                        className={`w-full rounded-lg px-3 py-2 text-sm transition-all resize-y ${
+                          draftSpecsEnabled.description
+                            ? "border border-[#8a614830] bg-white text-ink outline-clay"
+                            : "border border-dashed border-stone-300 bg-stone-100/90 text-stone-400 cursor-not-allowed select-none"
+                        }`}
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* Product Photos Section */}
@@ -1585,47 +2132,338 @@ export default function Admin() {
                   </div>
                 </div>
 
-                {/* Burn Time & Ingredients */}
-                <div className="grid gap-3.5 sm:grid-cols-2">
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-[#765442] mb-1">
-                      Burn Time
-                    </label>
-                    <input
-                      type="text"
-                      value={editForm.burnTime}
-                      onChange={(e) => setEditForm({ ...editForm, burnTime: e.target.value })}
-                      placeholder="e.g. 40–45 hours"
-                      className="w-full rounded-xl border border-[#8a614830] bg-white px-3.5 py-2.5 text-sm text-ink outline-clay shadow-2xs"
-                    />
+                {/* Removable / Tickable Specifications Section */}
+                <div className="rounded-2xl border border-[#8a614825] bg-[#fff6eb]/60 p-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 border-b border-[#8a614815] pb-2.5 mb-3">
+                    <div>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-ink flex items-center gap-1.5">
+                        <span>⚙️</span> Candle Specifications & Details (Tick to Include)
+                      </h4>
+                      <p className="text-[11px] text-[#765442] mt-0.5">
+                        Tick to include a detail. If ticked, it <b>must be filled</b>. If unticked, you cannot write in it and it will be removed from this candle.
+                      </p>
+                    </div>
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-[#765442] mb-1">
-                      Ingredients & Fragrance
-                    </label>
-                    <input
-                      type="text"
-                      value={editForm.ingredients}
-                      onChange={(e) => setEditForm({ ...editForm, ingredients: e.target.value })}
-                      placeholder="e.g. 100% Soy wax, cotton wick, essential oils"
-                      className="w-full rounded-xl border border-[#8a614830] bg-white px-3.5 py-2.5 text-sm text-ink outline-clay shadow-2xs"
-                    />
-                  </div>
-                </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {/* 1. Wick Size (Wink size) */}
+                    <div
+                      className={`rounded-xl border p-3 transition-all ${
+                        editSpecsEnabled.wickSize
+                          ? "border-emerald-300 bg-white shadow-2xs"
+                          : "border-stone-200 bg-stone-100/70"
+                      }`}
+                    >
+                      <label className="flex items-center justify-between cursor-pointer select-none">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={editSpecsEnabled.wickSize}
+                            onChange={(e) =>
+                              setEditSpecsEnabled((p) => ({ ...p, wickSize: e.target.checked }))
+                            }
+                            className="h-4 w-4 rounded accent-[#9b4a1b] cursor-pointer"
+                          />
+                          <span className="text-xs font-bold text-ink flex items-center gap-1.5">
+                            <span>🕯️</span> Wick Size <span className="text-[10px] font-normal text-[#765442]">(Wink size)</span>
+                          </span>
+                        </div>
+                        {editSpecsEnabled.wickSize ? (
+                          <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                            ✓ Ticked (Must fill)
+                          </span>
+                        ) : (
+                          <span className="rounded-md bg-stone-200 px-2 py-0.5 text-[10px] font-medium text-stone-600">
+                            ✕ Unticked (Excluded)
+                          </span>
+                        )}
+                      </label>
+                      <div className="mt-2">
+                        <input
+                          type="text"
+                          disabled={!editSpecsEnabled.wickSize}
+                          required={editSpecsEnabled.wickSize}
+                          value={editSpecsEnabled.wickSize ? editForm.wickSize : ""}
+                          onChange={(e) => setEditForm({ ...editForm, wickSize: e.target.value })}
+                          placeholder={
+                            editSpecsEnabled.wickSize
+                              ? "e.g. 24-ply braided cotton wick or Double wood wick (Required)"
+                              : "✕ Unticked - You cannot write here"
+                          }
+                          className={`w-full rounded-lg px-3 py-2 text-sm transition-all ${
+                            editSpecsEnabled.wickSize
+                              ? "border border-[#8a614830] bg-white text-ink outline-clay font-medium"
+                              : "border border-dashed border-stone-300 bg-stone-100/90 text-stone-400 cursor-not-allowed select-none"
+                          }`}
+                        />
+                      </div>
+                    </div>
 
-                {/* Description */}
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-[#765442] mb-1">
-                    Description
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={editForm.description}
-                    onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                    placeholder="Write evocative notes about this candle's scent, feel, and mood..."
-                    className="w-full rounded-xl border border-[#8a614830] bg-white p-3 text-sm text-ink outline-clay shadow-2xs resize-y"
-                  />
+                    {/* 2. Candle Length & Breadth (Dimensions) */}
+                    <div
+                      className={`rounded-xl border p-3 transition-all ${
+                        editSpecsEnabled.candleDimensions
+                          ? "border-emerald-300 bg-white shadow-2xs"
+                          : "border-stone-200 bg-stone-100/70"
+                      }`}
+                    >
+                      <label className="flex items-center justify-between cursor-pointer select-none">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={editSpecsEnabled.candleDimensions}
+                            onChange={(e) =>
+                              setEditSpecsEnabled((p) => ({ ...p, candleDimensions: e.target.checked }))
+                            }
+                            className="h-4 w-4 rounded accent-[#9b4a1b] cursor-pointer"
+                          />
+                          <span className="text-xs font-bold text-ink flex items-center gap-1.5">
+                            <span>📏</span> Candle Length & Breadth <span className="text-[10px] font-normal text-[#765442]">(Dimensions)</span>
+                          </span>
+                        </div>
+                        {editSpecsEnabled.candleDimensions ? (
+                          <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                            ✓ Ticked (Must fill)
+                          </span>
+                        ) : (
+                          <span className="rounded-md bg-stone-200 px-2 py-0.5 text-[10px] font-medium text-stone-600">
+                            ✕ Unticked (Excluded)
+                          </span>
+                        )}
+                      </label>
+                      <div className="mt-2">
+                        <input
+                          type="text"
+                          disabled={!editSpecsEnabled.candleDimensions}
+                          required={editSpecsEnabled.candleDimensions}
+                          value={editSpecsEnabled.candleDimensions ? editForm.candleDimensions : ""}
+                          onChange={(e) => setEditForm({ ...editForm, candleDimensions: e.target.value })}
+                          placeholder={
+                            editSpecsEnabled.candleDimensions
+                              ? "e.g. 7.5 cm (L) × 7.5 cm (B) × 9 cm (H) (Required)"
+                              : "✕ Unticked - You cannot write here"
+                          }
+                          className={`w-full rounded-lg px-3 py-2 text-sm transition-all ${
+                            editSpecsEnabled.candleDimensions
+                              ? "border border-[#8a614830] bg-white text-ink outline-clay font-medium"
+                              : "border border-dashed border-stone-300 bg-stone-100/90 text-stone-400 cursor-not-allowed select-none"
+                          }`}
+                        />
+                      </div>
+                    </div>
+
+                    {/* 3. Fragrance */}
+                    <div
+                      className={`rounded-xl border p-3 transition-all ${
+                        editSpecsEnabled.fragrance
+                          ? "border-emerald-300 bg-white shadow-2xs"
+                          : "border-stone-200 bg-stone-100/70"
+                      }`}
+                    >
+                      <label className="flex items-center justify-between cursor-pointer select-none">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={editSpecsEnabled.fragrance}
+                            onChange={(e) =>
+                              setEditSpecsEnabled((p) => ({ ...p, fragrance: e.target.checked }))
+                            }
+                            className="h-4 w-4 rounded accent-[#9b4a1b] cursor-pointer"
+                          />
+                          <span className="text-xs font-bold text-ink flex items-center gap-1.5">
+                            <span>🌸</span> Fragrance <span className="text-[10px] font-normal text-[#765442]">(Scent notes)</span>
+                          </span>
+                        </div>
+                        {editSpecsEnabled.fragrance ? (
+                          <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                            ✓ Ticked (Must fill)
+                          </span>
+                        ) : (
+                          <span className="rounded-md bg-stone-200 px-2 py-0.5 text-[10px] font-medium text-stone-600">
+                            ✕ Unticked (Excluded)
+                          </span>
+                        )}
+                      </label>
+                      <div className="mt-2">
+                        <input
+                          type="text"
+                          disabled={!editSpecsEnabled.fragrance}
+                          required={editSpecsEnabled.fragrance}
+                          value={editSpecsEnabled.fragrance ? editForm.fragrance : ""}
+                          onChange={(e) => setEditForm({ ...editForm, fragrance: e.target.value })}
+                          placeholder={
+                            editSpecsEnabled.fragrance
+                              ? "e.g. French Vanilla, Lavender & Sandalwood (Required)"
+                              : "✕ Unticked - You cannot write here"
+                          }
+                          className={`w-full rounded-lg px-3 py-2 text-sm transition-all ${
+                            editSpecsEnabled.fragrance
+                              ? "border border-[#8a614830] bg-white text-ink outline-clay font-medium"
+                              : "border border-dashed border-stone-300 bg-stone-100/90 text-stone-400 cursor-not-allowed select-none"
+                          }`}
+                        />
+                      </div>
+                    </div>
+
+                    {/* 4. Burn Time */}
+                    <div
+                      className={`rounded-xl border p-3 transition-all ${
+                        editSpecsEnabled.burnTime
+                          ? "border-emerald-300 bg-white shadow-2xs"
+                          : "border-stone-200 bg-stone-100/70"
+                      }`}
+                    >
+                      <label className="flex items-center justify-between cursor-pointer select-none">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={editSpecsEnabled.burnTime}
+                            onChange={(e) =>
+                              setEditSpecsEnabled((p) => ({ ...p, burnTime: e.target.checked }))
+                            }
+                            className="h-4 w-4 rounded accent-[#9b4a1b] cursor-pointer"
+                          />
+                          <span className="text-xs font-bold text-ink flex items-center gap-1.5">
+                            <span>⏳</span> Burn Time <span className="text-[10px] font-normal text-[#765442]">(Hours)</span>
+                          </span>
+                        </div>
+                        {editSpecsEnabled.burnTime ? (
+                          <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                            ✓ Ticked (Must fill)
+                          </span>
+                        ) : (
+                          <span className="rounded-md bg-stone-200 px-2 py-0.5 text-[10px] font-medium text-stone-600">
+                            ✕ Unticked (Excluded)
+                          </span>
+                        )}
+                      </label>
+                      <div className="mt-2">
+                        <input
+                          type="text"
+                          disabled={!editSpecsEnabled.burnTime}
+                          required={editSpecsEnabled.burnTime}
+                          value={editSpecsEnabled.burnTime ? editForm.burnTime : ""}
+                          onChange={(e) => setEditForm({ ...editForm, burnTime: e.target.value })}
+                          placeholder={
+                            editSpecsEnabled.burnTime
+                              ? "e.g. 35–40 hours (Required)"
+                              : "✕ Unticked - You cannot write here"
+                          }
+                          className={`w-full rounded-lg px-3 py-2 text-sm transition-all ${
+                            editSpecsEnabled.burnTime
+                              ? "border border-[#8a614830] bg-white text-ink outline-clay font-medium"
+                              : "border border-dashed border-stone-300 bg-stone-100/90 text-stone-400 cursor-not-allowed select-none"
+                          }`}
+                        />
+                      </div>
+                    </div>
+
+                    {/* 5. Ingredients */}
+                    <div
+                      className={`rounded-xl border p-3 transition-all ${
+                        editSpecsEnabled.ingredients
+                          ? "border-emerald-300 bg-white shadow-2xs"
+                          : "border-stone-200 bg-stone-100/70"
+                      }`}
+                    >
+                      <label className="flex items-center justify-between cursor-pointer select-none">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={editSpecsEnabled.ingredients}
+                            onChange={(e) =>
+                              setEditSpecsEnabled((p) => ({ ...p, ingredients: e.target.checked }))
+                            }
+                            className="h-4 w-4 rounded accent-[#9b4a1b] cursor-pointer"
+                          />
+                          <span className="text-xs font-bold text-ink flex items-center gap-1.5">
+                            <span>🌿</span> Ingredients <span className="text-[10px] font-normal text-[#765442]">(Made with)</span>
+                          </span>
+                        </div>
+                        {editSpecsEnabled.ingredients ? (
+                          <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                            ✓ Ticked (Must fill)
+                          </span>
+                        ) : (
+                          <span className="rounded-md bg-stone-200 px-2 py-0.5 text-[10px] font-medium text-stone-600">
+                            ✕ Unticked (Excluded)
+                          </span>
+                        )}
+                      </label>
+                      <div className="mt-2">
+                        <input
+                          type="text"
+                          disabled={!editSpecsEnabled.ingredients}
+                          required={editSpecsEnabled.ingredients}
+                          value={editSpecsEnabled.ingredients ? editForm.ingredients : ""}
+                          onChange={(e) => setEditForm({ ...editForm, ingredients: e.target.value })}
+                          placeholder={
+                            editSpecsEnabled.ingredients
+                              ? "e.g. 100% Pure Soy Wax, Organic Essential Oils (Required)"
+                              : "✕ Unticked - You cannot write here"
+                          }
+                          className={`w-full rounded-lg px-3 py-2 text-sm transition-all ${
+                            editSpecsEnabled.ingredients
+                              ? "border border-[#8a614830] bg-white text-ink outline-clay font-medium"
+                              : "border border-dashed border-stone-300 bg-stone-100/90 text-stone-400 cursor-not-allowed select-none"
+                          }`}
+                        />
+                      </div>
+                    </div>
+
+                    {/* 6. Description */}
+                    <div
+                      className={`rounded-xl border p-3 transition-all ${
+                        editSpecsEnabled.description
+                          ? "border-emerald-300 bg-white shadow-2xs"
+                          : "border-stone-200 bg-stone-100/70"
+                      }`}
+                    >
+                      <label className="flex items-center justify-between cursor-pointer select-none">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={editSpecsEnabled.description}
+                            onChange={(e) =>
+                              setEditSpecsEnabled((p) => ({ ...p, description: e.target.checked }))
+                            }
+                            className="h-4 w-4 rounded accent-[#9b4a1b] cursor-pointer"
+                          />
+                          <span className="text-xs font-bold text-ink flex items-center gap-1.5">
+                            <span>📝</span> Description & Story <span className="text-[10px] font-normal text-[#765442]">(Scent & mood)</span>
+                          </span>
+                        </div>
+                        {editSpecsEnabled.description ? (
+                          <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                            ✓ Ticked (Must fill)
+                          </span>
+                        ) : (
+                          <span className="rounded-md bg-stone-200 px-2 py-0.5 text-[10px] font-medium text-stone-600">
+                            ✕ Unticked (Excluded)
+                          </span>
+                        )}
+                      </label>
+                      <div className="mt-2">
+                        <textarea
+                          rows={2}
+                          disabled={!editSpecsEnabled.description}
+                          required={editSpecsEnabled.description}
+                          value={editSpecsEnabled.description ? editForm.description : ""}
+                          onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                          placeholder={
+                            editSpecsEnabled.description
+                              ? "Write evocative notes about this candle's scent, feel, and mood... (Required)"
+                              : "✕ Unticked - You cannot write here"
+                          }
+                          className={`w-full rounded-lg px-3 py-2 text-sm transition-all resize-y ${
+                            editSpecsEnabled.description
+                              ? "border border-[#8a614830] bg-white text-ink outline-clay font-medium"
+                              : "border border-dashed border-stone-300 bg-stone-100/90 text-stone-400 cursor-not-allowed select-none"
+                          }`}
+                        />
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Product Photos Section */}

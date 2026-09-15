@@ -53,8 +53,11 @@ export async function POST(req: Request) {
       name: body.name?.trim() || "Handcrafted Soy Candle",
       price: Number(body.price) || 0,
       description: body.description?.trim() || "",
-      burnTime: body.burnTime?.trim() || "30–35 hours",
-      ingredients: body.ingredients?.trim() || "Soy wax, cotton wick",
+      burnTime: body.burnTime?.trim() || "",
+      ingredients: body.ingredients?.trim() || "",
+      wickSize: body.wickSize?.trim() || "",
+      candleDimensions: body.candleDimensions?.trim() || "",
+      fragrance: body.fragrance?.trim() || "",
       category: body.category?.trim() || "Jar candle",
       images:
         body.images && Array.isArray(body.images) && body.images.length > 0

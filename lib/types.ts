@@ -1,4 +1,17 @@
-export type Product = { id: string; name: string; price: number; description: string; burnTime: string; ingredients: string; category: string; images: string[]; available: boolean };
+export type Product = {
+  id: string;
+  name: string;
+  price: number;
+  description?: string;
+  burnTime?: string;
+  ingredients?: string;
+  wickSize?: string;
+  candleDimensions?: string;
+  fragrance?: string;
+  category: string;
+  images: string[];
+  available: boolean;
+};
 export type CartItem = Product & { quantity: number };
 export type OrderStatus = "Order Received" | "Preparing" | "Out for Delivery" | "Delivered" | "Payment Pending" | "Payment Failed";
 export type Order = {

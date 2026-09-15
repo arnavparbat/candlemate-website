@@ -72,7 +72,7 @@ export function ProductCard({ product }: { product: Product }) {
             </span>
           </div>
           <p className="mt-0.5 line-clamp-1 sm:line-clamp-2 text-[11px] sm:text-sm leading-snug sm:leading-6 text-[#765442]">
-            {product.description}
+            {product.description || product.fragrance || (product.candleDimensions ? `Dimensions: ${product.candleDimensions}` : "") || "Handcrafted artisanal candle"}
           </p>
         </div>
 
