@@ -925,71 +925,78 @@ export default function Admin() {
   return (
     <main className="min-h-screen bg-[#f8f0e3]">
       <header className="border-b bg-[#fff8ed] sticky top-0 z-30 shadow-xs">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-3 sm:py-4">
-          <Link href="/" className="flex items-center group">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-3.5 sm:px-5 py-3 sm:py-4">
+          <Link href="/" className="flex items-center gap-2 group">
+            <img
+              src="/logo.png"
+              alt="Candlemate"
+              className="h-7 w-auto object-contain sm:hidden"
+            />
             <img
               src="/logo-wordmark.png"
               alt="Candlemate"
-              className="h-6 sm:h-7 w-auto object-contain"
+              className="h-5 sm:h-7 w-auto object-contain"
             />
           </Link>
-          <div className="flex items-center gap-3">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800 border border-emerald-200 shadow-xs">
+          <div className="flex items-center gap-1.5 sm:gap-3">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 sm:px-3 py-1 text-[11px] sm:text-xs font-semibold text-emerald-800 border border-emerald-200 shadow-xs">
               <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-              {isLiveConnected ? "Studio Live Stream Connected" : "Studio Auto-Sync Active"}
+              <span className="hidden sm:inline">{isLiveConnected ? "Studio Live Stream Connected" : "Studio Auto-Sync Active"}</span>
+              <span className="sm:hidden">{isLiveConnected ? "Live" : "Synced"}</span>
             </span>
-            <span className="rounded-full bg-[#e9d5b8] px-3 py-1 text-xs font-medium text-[#765442]">
-              Studio dashboard
+            <span className="rounded-full bg-[#e9d5b8] px-2.5 sm:px-3 py-1 text-[11px] sm:text-xs font-medium text-[#765442]">
+              <span className="hidden sm:inline">Studio dashboard</span>
+              <span className="sm:hidden">Studio</span>
             </span>
           </div>
         </div>
       </header>
 
-      <div className="mx-auto max-w-7xl px-5 py-9">
+      <div className="mx-auto max-w-7xl px-3.5 py-6 sm:px-5 sm:py-9">
         {/* Real-time New Order Received Banner */}
         {newOrderAlert && (
-          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-gradient-to-r from-[#ffeacc] via-[#fedbb3] to-[#ffe5c4] p-4 border-2 border-[#e5832d] shadow-lg animate-pulse">
-            <div className="flex items-center gap-3">
-              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-ink text-2xl text-white shadow-sm">
+          <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl bg-gradient-to-r from-[#ffeacc] via-[#fedbb3] to-[#ffe5c4] p-3.5 sm:p-4 border-2 border-[#e5832d] shadow-lg animate-pulse">
+            <div className="flex items-start sm:items-center gap-3">
+              <span className="flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-2xl bg-ink text-xl sm:text-2xl text-white shadow-sm shrink-0">
                 🕯️
               </span>
-              <div>
-                <p className="text-sm font-bold text-ink flex items-center gap-2">
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-ink flex items-center gap-1.5 flex-wrap">
                   <span>New Customer Order Received!</span>
-                  <span className="rounded-full bg-clay text-white text-[11px] px-2 py-0.5 font-semibold">
+                  <span className="rounded-full bg-clay text-white text-[10px] sm:text-[11px] px-2 py-0.5 font-semibold">
                     {newOrderAlert.id}
                   </span>
                   <span className="text-xs font-bold text-clay">₹{newOrderAlert.total}</span>
                 </p>
-                <p className="text-xs text-[#765442] mt-0.5">
-                  Customer: <b>{newOrderAlert.customer.name}</b> ({newOrderAlert.customer.phone}) · {newOrderAlert.customer.address}
+                <p className="text-xs text-[#765442] mt-0.5 break-words">
+                  Customer: <b>{newOrderAlert.customer.name}</b> (<a href={`tel:${newOrderAlert.customer.phone}`} className="underline">{newOrderAlert.customer.phone}</a>) · {newOrderAlert.customer.address}
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap pt-2 sm:pt-0 border-t border-[#e5832d]/30 sm:border-t-0">
               {newOrderAlert.screenshot && !newOrderAlert.screenshot.startsWith("PHONEPE_") && !newOrderAlert.screenshot.startsWith("CASHFREE_") && (
                 <button
                   type="button"
                   onClick={() => setSelectedScreenshotOrder(newOrderAlert)}
-                  className="rounded-xl bg-ink px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-clay transition shadow-sm cursor-pointer"
+                  className="rounded-xl bg-ink px-3 py-1.5 text-xs font-semibold text-white hover:bg-clay transition shadow-sm cursor-pointer active:scale-95"
                 >
                   View Payment Proof
                 </button>
               )}
               {(newOrderAlert.screenshot?.startsWith("CASHFREE_") || newOrderAlert.paymentMethod === "Cashfree Gateway") && (
-                <span className="inline-flex items-center gap-1 rounded-xl bg-blue-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm">
+                <span className="inline-flex items-center gap-1 rounded-xl bg-blue-600 px-2.5 py-1 text-xs font-bold text-white shadow-sm">
                   ⚡ Cashfree Auto-Verified
                 </span>
               )}
               {newOrderAlert.screenshot?.startsWith("PHONEPE_") && (
-                <span className="inline-flex items-center gap-1 rounded-xl bg-purple-700 px-3 py-1.5 text-xs font-bold text-white shadow-sm">
+                <span className="inline-flex items-center gap-1 rounded-xl bg-purple-700 px-2.5 py-1 text-xs font-bold text-white shadow-sm">
                   ⚡ PhonePe Auto-Verified
                 </span>
               )}
               <button
                 type="button"
                 onClick={() => setNewOrderAlert(null)}
-                className="rounded-xl border border-[#8a61483a] bg-white px-3 py-1.5 text-xs font-medium text-[#765442] hover:bg-stone-100 transition cursor-pointer"
+                className="rounded-xl border border-[#8a61483a] bg-white px-3 py-1.5 text-xs font-medium text-[#765442] hover:bg-stone-100 transition cursor-pointer active:scale-95"
               >
                 Dismiss
               </button>
@@ -997,32 +1004,211 @@ export default function Admin() {
           </div>
         )}
 
-        {notice && <p className="mb-5 rounded-xl bg-[#e5eedc] p-3 text-sm text-moss">{notice}</p>}
-        <h1 className="display text-5xl">Good morning, maker.</h1>
-        <p className="mt-2 text-[#765442]">Orders, products and payment details in one calm place.</p>
+        {notice && <p className="mb-5 rounded-xl bg-[#e5eedc] p-3 text-sm text-moss border border-[#c4dcbc]">{notice}</p>}
+        <h1 className="display text-3xl sm:text-5xl font-bold text-ink tracking-tight">Good morning, maker.</h1>
+        <p className="mt-1.5 text-xs sm:text-sm text-[#765442]">Orders, products and payment details in one calm place.</p>
 
         {/* Incoming Orders Section */}
-        <section className="mt-10">
-          <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+        <section className="mt-8 sm:mt-10">
+          <div className="mb-4 flex flex-col sm:flex-row sm:items-end justify-between gap-3">
             <div>
-              <h2 className="display text-3xl">Incoming orders</h2>
-              <p className="mt-1 text-sm text-[#765442]">
+              <h2 className="display text-2xl sm:text-3xl text-ink font-bold">Incoming orders</h2>
+              <p className="mt-1 text-xs sm:text-sm text-[#765442]">
                 {orders.length} order{orders.length === 1 ? "" : "s"} received
               </p>
             </div>
-            <select
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              className="rounded-lg border bg-white px-3 py-2 text-sm"
-            >
-              <option>All</option>
-              {statuses.map((s) => (
-                <option key={s}>{s}</option>
-              ))}
-            </select>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <span className="text-xs font-semibold uppercase tracking-wider text-[#765442] shrink-0 sm:hidden">Filter:</span>
+              <select
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                className="w-full sm:w-auto rounded-xl border border-[#8a614830] bg-white px-3.5 py-2 text-base sm:text-sm text-ink outline-clay shadow-2xs font-medium cursor-pointer"
+              >
+                <option>All</option>
+                {statuses.map((s) => (
+                  <option key={s}>{s}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
-          <div className="overflow-x-auto rounded-2xl border border-[#8a61483a] bg-white">
+          {/* Mobile Order Cards View (< md) - No horizontal scrolling */}
+          <div className="space-y-3.5 md:hidden">
+            {shown.map((o) => (
+              <div
+                key={o.id}
+                className="rounded-2xl border border-[#8a614822] bg-white p-4 shadow-sm"
+              >
+                {/* Card Top: Order ID, Date, Amount */}
+                <div className="flex items-start justify-between gap-2 border-b border-[#8a614815] pb-2.5">
+                  <div>
+                    <span className="font-mono text-xs font-bold text-clay bg-[#8a614810] px-2 py-0.5 rounded-md">
+                      {o.id}
+                    </span>
+                    <p className="text-[11px] text-[#765442] mt-1">
+                      📅 {new Date(o.createdAt).toLocaleDateString()} · {new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-lg font-black text-clay">
+                      ₹{o.total}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Customer Details */}
+                <div className="mt-3 rounded-xl bg-[#fffaf4] border border-[#8a614815] p-3 text-xs">
+                  <p className="font-bold text-ink text-sm flex items-center gap-1.5">
+                    <span>👤</span> {o.customer.name}
+                  </p>
+                  <p className="mt-1">
+                    <a
+                      href={`tel:${o.customer.phone}`}
+                      className="inline-flex items-center gap-1 font-semibold text-clay underline hover:text-ink transition"
+                    >
+                      <span>📞</span> {o.customer.phone}
+                    </a>
+                  </p>
+                  <p className="text-[#765442] mt-1 text-[11px] flex items-start gap-1 break-words">
+                    <span>📍</span> <span>{o.customer.address}</span>
+                  </p>
+                </div>
+
+                {/* Items Ordered */}
+                <div className="mt-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-[#765442] mb-1">
+                    Ordered Candles ({o.items.reduce((sum, item) => sum + (item.quantity || 1), 0)})
+                  </p>
+                  <div className="space-y-1">
+                    {o.items.map((item, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-center justify-between text-xs py-1 border-b border-[#8a61480f] last:border-0"
+                      >
+                        <span className="font-medium text-ink">
+                          {item.quantity}× {item.name}
+                        </span>
+                        <span className="text-[#765442] font-semibold">
+                          ₹{item.price * item.quantity}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Payment Status & Proof */}
+                <div className="mt-3 pt-2.5 border-t border-[#8a614815] flex items-center justify-between flex-wrap gap-2">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-[#765442]">
+                    Payment:
+                  </span>
+                  <div>
+                    {o.paymentMethod === "Cashfree Gateway" || (o.screenshot && o.screenshot.startsWith("CASHFREE_")) ? (
+                      o.paymentStatus === "FAILED" || o.status === "Payment Failed" ? (
+                        <span className="inline-flex items-center gap-1 rounded-lg bg-rose-50 border border-rose-200 px-2 py-0.5 text-xs font-semibold text-rose-700">
+                          ✕ Cashfree Failed
+                        </span>
+                      ) : o.paymentStatus === "PENDING" || o.status === "Payment Pending" ? (
+                        <div className="flex items-center gap-1.5">
+                          <span className="inline-flex items-center gap-1 rounded-lg bg-amber-50 border border-amber-200 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                            ⏳ Cashfree Pending
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => verifyGatewayOrder(o.id)}
+                            className="rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 px-2 py-0.5 text-[10px] font-bold"
+                          >
+                            🔄 Check
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-lg bg-blue-50 border border-blue-200 px-2 py-0.5 text-xs font-bold text-blue-900">
+                          ⚡ Cashfree Verified ✓
+                        </span>
+                      )
+                    ) : o.paymentMethod === "PhonePe Gateway" || (o.screenshot && o.screenshot.startsWith("PHONEPE_")) ? (
+                      o.paymentStatus === "FAILED" || o.status === "Payment Failed" ? (
+                        <span className="inline-flex items-center gap-1 rounded-lg bg-rose-50 border border-rose-200 px-2 py-0.5 text-xs font-semibold text-rose-700">
+                          ✕ PhonePe Failed
+                        </span>
+                      ) : o.paymentStatus === "PENDING" || o.status === "Payment Pending" ? (
+                        <span className="inline-flex items-center gap-1 rounded-lg bg-amber-50 border border-amber-200 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                          ⏳ PhonePe Pending
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-lg bg-purple-50 border border-purple-200 px-2 py-0.5 text-xs font-bold text-purple-900">
+                          ⚡ PhonePe Verified ✓
+                        </span>
+                      )
+                    ) : o.screenshot ? (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedScreenshotOrder(o)}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-clay/30 bg-[#fff8ed] px-2.5 py-1 text-xs font-semibold text-clay hover:bg-clay hover:text-white transition shadow-2xs active:scale-95"
+                      >
+                        <img src={o.screenshot} alt="" className="h-5 w-5 rounded object-cover" />
+                        <span>View Proof Photo</span>
+                        <span className="text-[10px] opacity-75">↗</span>
+                      </button>
+                    ) : o.screenshotExpired || getScreenshotExpiryInfo(o.createdAt, o.screenshotExpiresAt).isExpired ? (
+                      <span className="text-[11px] text-stone-500 bg-stone-100 px-2 py-0.5 rounded">
+                        Expired (Purged)
+                      </span>
+                    ) : (
+                      <span className="text-xs text-[#9a7b6a]">—</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Order Status Selector */}
+                <div className="mt-3 pt-2.5 border-t border-[#8a614815]">
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-[#765442] mb-1">
+                    Update Order Status
+                  </label>
+                  <select
+                    value={o.status}
+                    onChange={(e) => status(o.id, e.target.value as OrderStatus)}
+                    className={`w-full rounded-xl border font-bold p-2.5 text-xs transition cursor-pointer shadow-2xs ${
+                      o.status === "Delivered"
+                        ? "bg-emerald-50 text-emerald-800 border-emerald-300"
+                        : o.status === "Out for Delivery"
+                        ? "bg-purple-50 text-purple-800 border-purple-300"
+                        : o.status === "Preparing"
+                        ? "bg-amber-50 text-amber-800 border-amber-300"
+                        : o.status === "Payment Pending"
+                        ? "bg-orange-50 text-orange-800 border-orange-300"
+                        : o.status === "Payment Failed"
+                        ? "bg-rose-50 text-rose-800 border-rose-300"
+                        : "bg-sky-50 text-sky-800 border-sky-300"
+                    }`}
+                  >
+                    {statuses.map((s) => (
+                      <option key={s} value={s}>
+                        {s === "Delivered"
+                          ? "✓ Delivered"
+                          : s === "Out for Delivery"
+                          ? "🚚 Out for Delivery"
+                          : s === "Preparing"
+                          ? "🕯️ Preparing"
+                          : s === "Payment Pending"
+                          ? "⏳ Payment Pending"
+                          : s === "Payment Failed"
+                          ? "✕ Payment Failed"
+                          : "📋 Order Received"}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            ))}
+            {!shown.length && (
+              <div className="rounded-2xl border border-[#8a614825] bg-white p-8 text-center text-xs text-[#765442]">
+                No orders in this view yet.
+              </div>
+            )}
+          </div>
+
+          {/* Desktop Table View (>= md) */}
+          <div className="hidden md:block overflow-x-auto rounded-2xl border border-[#8a61483a] bg-white">
             <table className="w-full min-w-[850px] text-left text-sm">
               <thead className="bg-[#eadcc9] text-xs uppercase tracking-wide text-[#765442]">
                 <tr>
@@ -1043,7 +1229,7 @@ export default function Admin() {
                       <b>{o.customer.name}</b>
                       <br />
                       <span className="text-xs text-[#765442]">
-                        {o.customer.phone}
+                        <a href={`tel:${o.customer.phone}`} className="underline hover:text-ink">{o.customer.phone}</a>
                         <br />
                         {o.customer.address}
                       </span>
@@ -1221,138 +1407,146 @@ export default function Admin() {
         </section>
 
         {/* Collection & Settings Grid */}
-        <section className="mt-14 grid gap-8 lg:grid-cols-2">
+        <section className="mt-10 sm:mt-14 grid gap-8 lg:grid-cols-2">
           {/* Collection Column */}
           <div>
             <div className="flex items-center justify-between">
-              <h2 className="display text-3xl">Collection</h2>
-              <span className="text-xs text-[#765442]">{products.length} candles</span>
+              <h2 className="display text-2xl sm:text-3xl font-bold text-ink">Collection</h2>
+              <span className="text-xs font-semibold text-[#765442] bg-[#8a614815] px-2.5 py-1 rounded-full">
+                {products.length} candle{products.length === 1 ? "" : "s"}
+              </span>
             </div>
 
             <div className="mt-4 space-y-4">
               {products.map((p) => (
                 <div
                   key={p.id}
-                  className="rounded-2xl border border-[#8a614820] bg-white p-4 shadow-sm"
+                  className="rounded-2xl border border-[#8a614820] bg-white p-3.5 sm:p-4 shadow-sm"
                 >
-                  <div className="flex items-start gap-4">
-                    <img
-                      src={p.images?.[0] || "/hero-candle.jpg"}
-                      alt=""
-                      className="h-16 w-16 rounded-xl object-cover border border-[#8a61481a]"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <b className="text-base text-ink">{p.name}</b>
-                        <span className="rounded-full bg-[#8a614815] px-2 py-0.5 text-[10px] font-bold text-clay">
-                          {p.category}
-                        </span>
-                      </div>
-                      <p className="text-xs text-[#765442] mt-0.5">
-                        <span className="font-bold text-clay">₹{p.price}</span>
-                      </p>
-                      <div className="mt-1.5 flex flex-wrap gap-1.5 text-[10px]">
-                        {p.fragrance && (
-                          <span className="inline-flex items-center gap-1 rounded-md bg-[#f4ece3] px-2 py-0.5 text-[#6c4832] font-medium">
-                            🌸 {p.fragrance}
+                  <div className="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4">
+                    {/* Top Row for Mobile: Image + Details + Stock */}
+                    <div className="flex items-start gap-3 flex-1 min-w-0">
+                      <img
+                        src={p.images?.[0] || "/hero-candle.jpg"}
+                        alt={p.name}
+                        className="h-16 w-16 sm:h-20 sm:w-20 rounded-xl object-cover border border-[#8a61481a] shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <b className="text-sm sm:text-base text-ink truncate font-bold">{p.name}</b>
+                          <span className="rounded-full bg-[#8a614815] px-2 py-0.5 text-[10px] font-bold text-clay shrink-0">
+                            {p.category}
                           </span>
-                        )}
-                        {p.wickSize && (
-                          <span className="inline-flex items-center gap-1 rounded-md bg-[#f4ece3] px-2 py-0.5 text-[#6c4832] font-medium">
-                            🕯️ Wick: {p.wickSize}
-                          </span>
-                        )}
-                        {p.candleDimensions && (
-                          <span className="inline-flex items-center gap-1 rounded-md bg-[#f4ece3] px-2 py-0.5 text-[#6c4832] font-medium">
-                            📏 {p.candleDimensions}
-                          </span>
-                        )}
-                        {p.burnTime && (
-                          <span className="inline-flex items-center gap-1 rounded-md bg-[#f4ece3] px-2 py-0.5 text-[#6c4832] font-medium">
-                            ⏳ {p.burnTime}
-                          </span>
-                        )}
-                        {p.ingredients && (
-                          <span className="inline-flex items-center gap-1 rounded-md bg-[#f4ece3] px-2 py-0.5 text-[#6c4832] font-medium">
-                            🌿 {p.ingredients}
-                          </span>
-                        )}
-                      </div>
-                      {p.description && (
-                        <p className="text-xs text-[#765442]/80 line-clamp-1 mt-1">
-                          {p.description}
-                        </p>
-                      )}
+                        </div>
+                        <p className="text-sm font-extrabold text-clay mt-0.5">₹{p.price}</p>
 
-                      {/* Action buttons: Edit, Photo, etc */}
-                      <div className="mt-3 flex flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => startEditingProduct(p)}
-                          className="inline-flex items-center gap-1.5 rounded-lg bg-ink text-white px-3 py-1 text-xs font-semibold hover:bg-clay transition shadow-2xs cursor-pointer"
-                        >
-                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                          </svg>
-                          <span>Edit Details</span>
-                        </button>
+                        {/* Active specifications badges */}
+                        <div className="mt-1.5 flex flex-wrap gap-1 text-[10px]">
+                          {p.fragrance && (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-[#f4ece3] px-2 py-0.5 text-[#6c4832] font-medium">
+                              🌸 {p.fragrance}
+                            </span>
+                          )}
+                          {p.wickSize && (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-[#f4ece3] px-2 py-0.5 text-[#6c4832] font-medium">
+                              🕯️ Wick: {p.wickSize}
+                            </span>
+                          )}
+                          {p.candleDimensions && (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-[#f4ece3] px-2 py-0.5 text-[#6c4832] font-medium">
+                              📏 {p.candleDimensions}
+                            </span>
+                          )}
+                          {p.burnTime && (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-[#f4ece3] px-2 py-0.5 text-[#6c4832] font-medium">
+                              ⏳ {p.burnTime}
+                            </span>
+                          )}
+                          {p.ingredients && (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-[#f4ece3] px-2 py-0.5 text-[#6c4832] font-medium">
+                              🌿 {p.ingredients}
+                            </span>
+                          )}
+                        </div>
 
-                        <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#8a61483a] bg-[#fff8ed] px-2.5 py-1 text-xs font-medium text-clay hover:bg-clay hover:text-white transition">
-                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                          </svg>
-                          Change photo
-                          <input
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={(e) => {
-                              const f = e.target.files?.[0];
-                              if (f) handleProductImageUpload(p, f, 0);
-                              e.target.value = "";
-                            }}
-                          />
-                        </label>
-
-                        <label className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-[#8a61482a] bg-white px-2 py-1 text-xs text-[#765442] hover:border-clay hover:text-clay transition">
-                          + Add photo
-                          <input
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={(e) => {
-                              const f = e.target.files?.[0];
-                              if (f) handleProductAddImage(p, f);
-                              e.target.value = "";
-                            }}
-                          />
-                        </label>
+                        {p.description && (
+                          <p className="text-xs text-[#765442]/80 line-clamp-2 mt-1.5 leading-relaxed">
+                            {p.description}
+                          </p>
+                        )}
                       </div>
                     </div>
 
-                    <div className="flex flex-col items-end gap-2">
+                    <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-start gap-2 pt-2 sm:pt-0 border-t border-[#8a614810] sm:border-t-0 shrink-0">
                       <button
+                        type="button"
                         onClick={() => updateProduct(p, { available: !p.available })}
-                        className={`rounded-full px-3 py-1.5 text-xs font-medium ${
+                        className={`rounded-full px-3 py-1.5 text-xs font-semibold transition active:scale-95 cursor-pointer shadow-2xs ${
                           p.available
-                            ? "bg-[#e5eedc] text-moss"
-                            : "bg-stone-200 text-stone-600"
+                            ? "bg-[#e5eedc] text-moss hover:bg-[#d5e4cc]"
+                            : "bg-stone-200 text-stone-600 hover:bg-stone-300"
                         }`}
                       >
-                        {p.available ? "In stock" : "Sold out"}
+                        {p.available ? "✓ In stock" : "✕ Sold out"}
                       </button>
                       <button
+                        type="button"
                         onClick={() => remove(p.id)}
-                        className="text-xs text-[#a94d3b] hover:underline"
+                        className="text-xs font-medium text-[#a94d3b] hover:underline p-1 active:scale-95 cursor-pointer"
                       >
                         Delete
                       </button>
                     </div>
                   </div>
 
+                  {/* Action buttons: Edit, Photo, etc */}
+                  <div className="mt-3 flex flex-wrap items-center gap-2 pt-2.5 border-t border-[#8a614812]">
+                    <button
+                      type="button"
+                      onClick={() => startEditingProduct(p)}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-ink text-white px-3.5 py-2 text-xs font-semibold hover:bg-clay transition shadow-2xs cursor-pointer active:scale-95"
+                    >
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                      <span>Edit Candle</span>
+                    </button>
+
+                    <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-[#8a61483a] bg-[#fff8ed] px-3 py-2 text-xs font-medium text-clay hover:bg-clay hover:text-white transition active:scale-95 shadow-2xs">
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      Change photo
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) handleProductImageUpload(p, f, 0);
+                          e.target.value = "";
+                        }}
+                      />
+                    </label>
+
+                    <label className="inline-flex cursor-pointer items-center gap-1 rounded-xl border border-[#8a61482a] bg-white px-2.5 py-2 text-xs text-[#765442] hover:border-clay hover:text-clay transition active:scale-95 shadow-2xs">
+                      + Add photo
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) handleProductAddImage(p, f);
+                          e.target.value = "";
+                        }}
+                      />
+                    </label>
+                  </div>
+
                   {/* Gallery thumbnails for candle if multiple */}
                   {p.images && p.images.length > 1 && (
-                    <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[#8a61481a] pt-3">
+                    <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[#8a61481a] pt-2.5">
                       <span className="text-[11px] uppercase tracking-wide text-[#765442]">Gallery:</span>
                       {p.images.map((imgUrl, imgIdx) => (
                         <div key={imgIdx} className="group relative h-10 w-10 overflow-hidden rounded-lg border border-[#8a61482a]">
@@ -1374,8 +1568,12 @@ export default function Admin() {
             </div>
 
             {/* Add a candle Form */}
-            <form onSubmit={add} className="mt-6 rounded-2xl border border-dashed border-[#a66a46] bg-[#fffaf2] p-5 shadow-sm">
-              <h3 className="display text-2xl">Add a candle</h3>
+            <form onSubmit={add} className="mt-6 rounded-3xl border border-dashed border-[#a66a46] bg-[#fffaf2] p-4 sm:p-6 shadow-sm">
+              <h3 className="display text-2xl sm:text-3xl font-bold text-ink">Add a candle</h3>
+              <p className="mt-1 text-xs sm:text-sm text-[#765442]">
+                Create a new candle for your storefront collection.
+              </p>
+
               <div className="mt-4 grid gap-3.5 sm:grid-cols-3">
                 <label className="text-xs font-semibold uppercase tracking-wider text-[#765442]">
                   Candle Name *
@@ -1385,13 +1583,13 @@ export default function Admin() {
                     type="text"
                     placeholder="e.g. Amber & Sandalwood"
                     onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                    className="mt-1 w-full rounded-xl border border-[#8a614830] bg-white p-2.5 text-sm text-ink outline-clay shadow-2xs font-medium"
+                    className="mt-1 w-full rounded-xl border border-[#8a614830] bg-white p-3 text-base sm:text-sm text-ink outline-clay shadow-2xs font-medium"
                   />
                 </label>
                 <label className="text-xs font-semibold uppercase tracking-wider text-[#765442]">
                   Price (₹ INR) *
                   <div className="relative mt-1">
-                    <span className="absolute left-3 top-2.5 text-sm font-bold text-[#765442]">₹</span>
+                    <span className="absolute left-3.5 top-3 text-sm font-bold text-[#765442]">₹</span>
                     <input
                       required
                       min="0"
@@ -1400,7 +1598,7 @@ export default function Admin() {
                       type="number"
                       placeholder="e.g. 649"
                       onChange={(e) => setDraft({ ...draft, price: e.target.value })}
-                      className="w-full rounded-xl border border-[#8a614830] bg-white pl-8 pr-3 py-2.5 text-sm font-bold text-ink outline-clay shadow-2xs"
+                      className="w-full rounded-xl border border-[#8a614830] bg-white pl-8 pr-3 py-3 text-base sm:text-sm font-bold text-ink outline-clay shadow-2xs"
                     />
                   </div>
                 </label>
@@ -1409,7 +1607,7 @@ export default function Admin() {
                   <select
                     value={draft.category}
                     onChange={(e) => setDraft({ ...draft, category: e.target.value })}
-                    className="mt-1 w-full rounded-xl border border-[#8a614830] bg-white p-2.5 text-sm text-ink outline-clay shadow-2xs"
+                    className="mt-1 w-full rounded-xl border border-[#8a614830] bg-white p-3 text-base sm:text-sm text-ink outline-clay shadow-2xs"
                   >
                     <option value="Jar candle">Jar candle</option>
                     <option value="Sculptural">Sculptural</option>
@@ -1422,7 +1620,7 @@ export default function Admin() {
               </div>
 
               {/* Removable / Tickable Specifications Section */}
-              <div className="mt-5 rounded-2xl border border-[#8a614825] bg-[#fff6eb]/60 p-4">
+              <div className="mt-5 rounded-2xl border border-[#8a614825] bg-[#fff6eb]/60 p-3.5 sm:p-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 border-b border-[#8a614815] pb-2.5 mb-3">
                   <div>
                     <h4 className="text-xs font-bold uppercase tracking-wider text-ink flex items-center gap-1.5">
@@ -1443,7 +1641,7 @@ export default function Admin() {
                         : "border-stone-200 bg-stone-100/70"
                     }`}
                   >
-                    <label className="flex items-center justify-between cursor-pointer select-none">
+                    <label className="flex items-center justify-between cursor-pointer select-none py-0.5">
                       <div className="flex items-center gap-2">
                         <input
                           type="checkbox"
@@ -1479,7 +1677,7 @@ export default function Admin() {
                             ? "e.g. 24-ply braided cotton wick or Double wood wick (Required)"
                             : "✕ Unticked - You cannot write here"
                         }
-                        className={`w-full rounded-lg px-3 py-2 text-sm transition-all ${
+                        className={`w-full rounded-lg px-3 py-2.5 text-base sm:text-sm transition-all ${
                           draftSpecsEnabled.wickSize
                             ? "border border-[#8a614830] bg-white text-ink outline-clay"
                             : "border border-dashed border-stone-300 bg-stone-100/90 text-stone-400 cursor-not-allowed select-none"
@@ -1496,7 +1694,7 @@ export default function Admin() {
                         : "border-stone-200 bg-stone-100/70"
                     }`}
                   >
-                    <label className="flex items-center justify-between cursor-pointer select-none">
+                    <label className="flex items-center justify-between cursor-pointer select-none py-0.5">
                       <div className="flex items-center gap-2">
                         <input
                           type="checkbox"
@@ -1532,7 +1730,7 @@ export default function Admin() {
                             ? "e.g. 7.5 cm (L) × 7.5 cm (B) × 9 cm (H) (Required)"
                             : "✕ Unticked - You cannot write here"
                         }
-                        className={`w-full rounded-lg px-3 py-2 text-sm transition-all ${
+                        className={`w-full rounded-lg px-3 py-2.5 text-base sm:text-sm transition-all ${
                           draftSpecsEnabled.candleDimensions
                             ? "border border-[#8a614830] bg-white text-ink outline-clay"
                             : "border border-dashed border-stone-300 bg-stone-100/90 text-stone-400 cursor-not-allowed select-none"
@@ -1549,7 +1747,7 @@ export default function Admin() {
                         : "border-stone-200 bg-stone-100/70"
                     }`}
                   >
-                    <label className="flex items-center justify-between cursor-pointer select-none">
+                    <label className="flex items-center justify-between cursor-pointer select-none py-0.5">
                       <div className="flex items-center gap-2">
                         <input
                           type="checkbox"
@@ -1585,7 +1783,7 @@ export default function Admin() {
                             ? "e.g. French Vanilla, Lavender & Sandalwood (Required)"
                             : "✕ Unticked - You cannot write here"
                         }
-                        className={`w-full rounded-lg px-3 py-2 text-sm transition-all ${
+                        className={`w-full rounded-lg px-3 py-2.5 text-base sm:text-sm transition-all ${
                           draftSpecsEnabled.fragrance
                             ? "border border-[#8a614830] bg-white text-ink outline-clay"
                             : "border border-dashed border-stone-300 bg-stone-100/90 text-stone-400 cursor-not-allowed select-none"
@@ -1602,7 +1800,7 @@ export default function Admin() {
                         : "border-stone-200 bg-stone-100/70"
                     }`}
                   >
-                    <label className="flex items-center justify-between cursor-pointer select-none">
+                    <label className="flex items-center justify-between cursor-pointer select-none py-0.5">
                       <div className="flex items-center gap-2">
                         <input
                           type="checkbox"
@@ -1638,7 +1836,7 @@ export default function Admin() {
                             ? "e.g. 35–40 hours (Required)"
                             : "✕ Unticked - You cannot write here"
                         }
-                        className={`w-full rounded-lg px-3 py-2 text-sm transition-all ${
+                        className={`w-full rounded-lg px-3 py-2.5 text-base sm:text-sm transition-all ${
                           draftSpecsEnabled.burnTime
                             ? "border border-[#8a614830] bg-white text-ink outline-clay"
                             : "border border-dashed border-stone-300 bg-stone-100/90 text-stone-400 cursor-not-allowed select-none"
@@ -1655,7 +1853,7 @@ export default function Admin() {
                         : "border-stone-200 bg-stone-100/70"
                     }`}
                   >
-                    <label className="flex items-center justify-between cursor-pointer select-none">
+                    <label className="flex items-center justify-between cursor-pointer select-none py-0.5">
                       <div className="flex items-center gap-2">
                         <input
                           type="checkbox"
@@ -1691,7 +1889,7 @@ export default function Admin() {
                             ? "e.g. 100% Pure Soy Wax, Organic Essential Oils (Required)"
                             : "✕ Unticked - You cannot write here"
                         }
-                        className={`w-full rounded-lg px-3 py-2 text-sm transition-all ${
+                        className={`w-full rounded-lg px-3 py-2.5 text-base sm:text-sm transition-all ${
                           draftSpecsEnabled.ingredients
                             ? "border border-[#8a614830] bg-white text-ink outline-clay"
                             : "border border-dashed border-stone-300 bg-stone-100/90 text-stone-400 cursor-not-allowed select-none"
@@ -1708,7 +1906,7 @@ export default function Admin() {
                         : "border-stone-200 bg-stone-100/70"
                     }`}
                   >
-                    <label className="flex items-center justify-between cursor-pointer select-none">
+                    <label className="flex items-center justify-between cursor-pointer select-none py-0.5">
                       <div className="flex items-center gap-2">
                         <input
                           type="checkbox"
@@ -1744,7 +1942,7 @@ export default function Admin() {
                             ? "Write evocative notes about this candle's scent, feel, and mood... (Required)"
                             : "✕ Unticked - You cannot write here"
                         }
-                        className={`w-full rounded-lg px-3 py-2 text-sm transition-all resize-y ${
+                        className={`w-full rounded-lg px-3 py-2.5 text-base sm:text-sm transition-all resize-y ${
                           draftSpecsEnabled.description
                             ? "border border-[#8a614830] bg-white text-ink outline-clay"
                             : "border border-dashed border-stone-300 bg-stone-100/90 text-stone-400 cursor-not-allowed select-none"
@@ -1756,14 +1954,14 @@ export default function Admin() {
               </div>
 
               {/* Product Photos Section */}
-              <div className="mt-4">
+              <div className="mt-5">
                 <label className="block text-xs font-semibold uppercase tracking-wider text-[#765442]">
                   Product Photos
                 </label>
 
                 {/* Upload from Device Button */}
-                <div className="mt-2 flex flex-wrap items-center gap-3">
-                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-clay bg-[#f8ede0] px-4 py-2.5 text-xs font-medium text-clay hover:bg-clay hover:text-white transition">
+                <div className="mt-2 flex flex-col sm:flex-row sm:items-center gap-3">
+                  <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-clay bg-[#f8ede0] px-4 py-3 text-xs font-semibold text-clay hover:bg-clay hover:text-white transition w-full sm:w-auto shadow-2xs active:scale-95">
                     <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                     </svg>
@@ -1778,7 +1976,7 @@ export default function Admin() {
                     />
                   </label>
                   <span className="text-xs text-[#765442]">
-                    {isProcessingPhoto ? "Optimizing image..." : "Upload one or multiple images directly from your phone/computer"}
+                    {isProcessingPhoto ? "Optimizing image..." : "Upload photos directly from phone camera or gallery"}
                   </span>
                 </div>
 
@@ -1794,7 +1992,7 @@ export default function Admin() {
                         <button
                           type="button"
                           onClick={() => removeUploadedPhoto(i)}
-                          className="absolute top-1 right-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/70 text-xs font-bold text-white hover:bg-red-600 transition"
+                          className="absolute top-1 right-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/75 text-xs font-bold text-white hover:bg-red-600 transition cursor-pointer"
                           title="Remove photo"
                         >
                           ×
@@ -1811,7 +2009,7 @@ export default function Admin() {
                     placeholder="https://..."
                     value={draft.images}
                     onChange={(e) => setDraft({ ...draft, images: e.target.value })}
-                    className="mt-1 h-14 w-full rounded-lg border bg-white p-2 text-xs text-ink outline-clay"
+                    className="mt-1 h-14 w-full rounded-xl border border-[#8a614830] bg-white p-2.5 text-base sm:text-xs text-ink outline-clay"
                   />
                 </label>
               </div>
@@ -1819,42 +2017,51 @@ export default function Admin() {
               <button
                 type="submit"
                 disabled={isProcessingPhoto}
-                className="mt-4 rounded-full bg-ink px-5 py-2.5 text-sm text-white hover:bg-clay transition disabled:bg-stone-400"
+                className="mt-5 w-full sm:w-auto rounded-full bg-ink px-7 py-3.5 text-base sm:text-sm font-bold text-white hover:bg-clay transition disabled:bg-stone-400 active:scale-[0.98] shadow-md cursor-pointer"
               >
-                Add product
+                + Add candle to store
               </button>
             </form>
           </div>
 
           {/* Studio Settings Column */}
           <div>
-            <h2 className="display text-3xl">Studio settings</h2>
+            <h2 className="display text-2xl sm:text-3xl font-bold text-ink">Studio settings</h2>
+            <p className="mt-1 text-xs sm:text-sm text-[#765442]">
+              Manage payment destination UPI ID and access password.
+            </p>
 
             {/* Payment QR Settings */}
-            <form onSubmit={payment} className="mt-4 rounded-2xl bg-white p-5 shadow-sm">
-              <h3 className="font-medium text-ink">Payment QR</h3>
-              <p className="mt-1 text-sm text-[#765442]">
+            <form onSubmit={payment} className="mt-4 rounded-2xl bg-white p-4 sm:p-5 shadow-sm border border-[#8a614820]">
+              <h3 className="font-semibold text-ink text-sm sm:text-base">Payment QR Destination</h3>
+              <p className="mt-1 text-xs sm:text-sm text-[#765442]">
                 This UPI ID generates each checkout QR code automatically.
               </p>
               <input
                 value={upi}
                 onChange={(e) => setUpi(e.target.value)}
-                className="mt-4 w-full rounded-lg border p-2 text-sm text-ink outline-clay"
+                className="mt-3 w-full rounded-xl border border-[#8a614830] p-3 text-base sm:text-sm text-ink outline-clay font-medium"
                 placeholder="name@upi"
               />
-              <button className="mt-3 rounded-full bg-ink px-5 py-2.5 text-sm text-white hover:bg-clay transition">
+              <button
+                type="submit"
+                className="mt-3 w-full sm:w-auto rounded-full bg-ink px-5 py-2.5 text-sm font-semibold text-white hover:bg-clay transition active:scale-95 cursor-pointer shadow-2xs"
+              >
                 Save UPI ID
               </button>
             </form>
 
             {/* Password Settings */}
-            <form onSubmit={password} className="mt-5 rounded-2xl bg-white p-5 shadow-sm">
-              <h3 className="font-medium text-ink">Change studio password</h3>
+            <form onSubmit={password} className="mt-5 rounded-2xl bg-white p-4 sm:p-5 shadow-sm border border-[#8a614820]">
+              <h3 className="font-semibold text-ink text-sm sm:text-base">Change studio password</h3>
+              <p className="mt-1 text-xs sm:text-sm text-[#765442]">
+                Keep your studio dashboard secure.
+              </p>
               <input
                 name="currentPassword"
                 type="password"
                 required
-                className="mt-4 w-full rounded-lg border p-2 text-sm text-ink outline-clay"
+                className="mt-3 w-full rounded-xl border border-[#8a614830] p-3 text-base sm:text-sm text-ink outline-clay"
                 placeholder="Current password"
               />
               <input
@@ -1862,16 +2069,19 @@ export default function Admin() {
                 type="password"
                 required
                 minLength={8}
-                className="mt-3 w-full rounded-lg border p-2 text-sm text-ink outline-clay"
+                className="mt-3 w-full rounded-xl border border-[#8a614830] p-3 text-base sm:text-sm text-ink outline-clay"
                 placeholder="New password (8+ characters)"
               />
-              <button className="mt-3 rounded-full bg-ink px-5 py-2.5 text-sm text-white hover:bg-clay transition">
+              <button
+                type="submit"
+                className="mt-4 w-full sm:w-auto rounded-full bg-ink px-5 py-2.5 text-sm font-semibold text-white hover:bg-clay transition active:scale-95 cursor-pointer shadow-2xs"
+              >
                 Update password
               </button>
             </form>
 
-            {/* Cloud Storage Status (Replaced old Cloudflare Edge Storage) */}
-            <div className="mt-5 rounded-2xl bg-white p-5 shadow-sm border border-[#8a614820]">
+            {/* Cloud Storage Status (Supabase) */}
+            <div className="mt-5 rounded-2xl bg-white p-4 sm:p-5 shadow-sm border border-[#8a614820]">
               <div className="flex items-center gap-2">
                 <span className="flex h-2.5 w-2.5 relative">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -1882,7 +2092,7 @@ export default function Admin() {
               <p className="mt-2 text-xs leading-relaxed text-[#765442]">
                 Customer orders are persisted in <b>Supabase PostgreSQL</b> and payment proof screenshots are saved in the <b>payment-proofs</b> bucket. Real-time updates push directly to this studio dashboard.
               </p>
-              <div className="mt-3 flex items-center gap-2 text-[11px] font-medium text-emerald-800 bg-emerald-50 rounded-lg p-2 border border-emerald-200">
+              <div className="mt-3 flex items-center gap-2 text-[11px] font-medium text-emerald-800 bg-emerald-50 rounded-lg p-2.5 border border-emerald-200">
                 <span>✓ Cloudflare KV binding removed · Zero-crash order processing active</span>
               </div>
             </div>
@@ -1893,32 +2103,36 @@ export default function Admin() {
       {/* Payment Screenshot Viewer Modal */}
       {selectedScreenshotOrder && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-2 sm:p-4 backdrop-blur-sm overflow-y-auto"
           onClick={() => setSelectedScreenshotOrder(null)}
         >
           <div
-            className="relative flex max-h-[92vh] w-full max-w-3xl flex-col rounded-3xl bg-[#fff8ed] shadow-2xl border border-[#8a61483a] overflow-hidden"
+            className="relative flex max-h-[94vh] sm:max-h-[92vh] w-full max-w-3xl flex-col rounded-2xl sm:rounded-3xl bg-[#fff8ed] shadow-2xl border border-[#8a61483a] overflow-hidden my-auto"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-[#8a614820] bg-[#f5ede0] px-6 py-4">
-              <div>
-                <div className="flex items-center gap-2.5">
-                  <h3 className="display text-xl text-ink font-bold">
+            <div className="flex items-center justify-between border-b border-[#8a614820] bg-[#f5ede0] px-4 sm:px-6 py-3.5 sm:py-4">
+              <div className="min-w-0 pr-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="display text-base sm:text-xl text-ink font-bold break-all">
                     Payment Verification: {selectedScreenshotOrder.id}
                   </h3>
-                  <span className="rounded-full bg-clay/15 px-2.5 py-0.5 text-xs font-semibold text-clay">
+                  <span className="rounded-full bg-clay/15 px-2.5 py-0.5 text-[11px] sm:text-xs font-semibold text-clay shrink-0">
                     {selectedScreenshotOrder.status}
                   </span>
                 </div>
-                <p className="mt-0.5 text-xs text-[#765442]">
-                  Customer: <b className="text-ink">{selectedScreenshotOrder.customer.name}</b> · Phone: <b className="text-ink">{selectedScreenshotOrder.customer.phone}</b> · Order Total: <b className="text-clay">₹{selectedScreenshotOrder.total}</b>
+                <p className="mt-1 text-[11px] sm:text-xs text-[#765442] break-words">
+                  Customer: <b className="text-ink">{selectedScreenshotOrder.customer.name}</b> · Phone:{" "}
+                  <a href={`tel:${selectedScreenshotOrder.customer.phone}`} className="text-clay underline font-bold">
+                    {selectedScreenshotOrder.customer.phone}
+                  </a>{" "}
+                  · Total: <b className="text-clay">₹{selectedScreenshotOrder.total}</b>
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setSelectedScreenshotOrder(null)}
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-lg font-bold text-[#765442] hover:bg-clay hover:text-white transition shadow-sm"
+                className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-full bg-white/90 text-base sm:text-lg font-bold text-[#765442] hover:bg-clay hover:text-white transition shadow-sm cursor-pointer"
                 title="Close modal"
               >
                 ✕
@@ -1926,26 +2140,27 @@ export default function Admin() {
             </div>
 
             {/* 3-Day Cloud Storage Expiry Notice */}
-            <div className="flex items-center justify-between bg-[#fff0db] px-6 py-2.5 text-xs text-[#8a4e1d] border-b border-[#f0cca3]">
+            <div className="flex items-center justify-between bg-[#fff0db] px-4 sm:px-6 py-2 sm:py-2.5 text-[11px] sm:text-xs text-[#8a4e1d] border-b border-[#f0cca3]">
               <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-[#e5832d] animate-pulse" />
+                <span className="h-2 w-2 rounded-full bg-[#e5832d] animate-pulse shrink-0" />
                 <span>
-                  <b>3-Day Cloud Retention:</b> This payment proof will automatically expire and be deleted from cloud storage in <b>{getScreenshotExpiryInfo(selectedScreenshotOrder.createdAt, selectedScreenshotOrder.screenshotExpiresAt).timeLeftText}</b>.
+                  <b>3-Day Cloud Retention:</b> Proof automatically expires in{" "}
+                  <b>{getScreenshotExpiryInfo(selectedScreenshotOrder.createdAt, selectedScreenshotOrder.screenshotExpiresAt).timeLeftText}</b>.
                 </span>
               </div>
             </div>
 
             {/* Image Display Body */}
-            <div className="flex-1 overflow-auto bg-[#2b1911] p-4 flex items-center justify-center min-h-[360px]">
+            <div className="flex-1 overflow-auto bg-[#2b1911] p-3 sm:p-4 flex items-center justify-center min-h-[220px] sm:min-h-[360px]">
               {selectedScreenshotOrder.screenshot ? (
                 <img
                   src={selectedScreenshotOrder.screenshot}
                   alt={`Payment screenshot for order ${selectedScreenshotOrder.id}`}
-                  className="max-h-[60vh] max-w-full rounded-xl object-contain shadow-2xl border border-white/10"
+                  className="max-h-[55vh] sm:max-h-[60vh] max-w-full rounded-xl object-contain shadow-2xl border border-white/10"
                 />
               ) : (
-                <div className="text-center p-12 text-stone-300">
-                  <p className="text-base font-semibold">Screenshot Expired</p>
+                <div className="text-center p-8 sm:p-12 text-stone-300">
+                  <p className="text-sm sm:text-base font-semibold">Screenshot Expired</p>
                   <p className="text-xs text-stone-400 mt-1">
                     This payment screenshot was automatically purged after 3 days to preserve cloud storage.
                   </p>
@@ -1954,8 +2169,8 @@ export default function Admin() {
             </div>
 
             {/* Modal Footer Controls */}
-            <div className="flex flex-wrap items-center justify-between gap-3 bg-[#f5ede0] px-6 py-3.5 border-t border-[#8a614820]">
-              <div className="flex items-center gap-2">
+            <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3 bg-[#f5ede0] px-4 sm:px-6 py-3 sm:py-3.5 border-t border-[#8a614820]">
+              <div className="grid grid-cols-2 sm:flex items-center gap-2">
                 {selectedScreenshotOrder.screenshot && (
                   <>
                     <button
@@ -1967,16 +2182,16 @@ export default function Admin() {
                           selectedScreenshotOrder.customer.name
                         )
                       }
-                      className="rounded-xl border border-[#8a61483a] bg-white px-3.5 py-2 text-xs font-medium text-clay hover:bg-clay hover:text-white transition shadow-sm cursor-pointer"
+                      className="rounded-xl border border-[#8a61483a] bg-white px-3 py-2 text-xs font-semibold text-clay hover:bg-clay hover:text-white transition shadow-xs text-center cursor-pointer active:scale-95"
                     >
-                      Open in New Tab ↗
+                      Open in Tab ↗
                     </button>
                     <a
                       href={selectedScreenshotOrder.screenshot}
                       download={`payment-order-${selectedScreenshotOrder.id}.jpg`}
-                      className="rounded-xl bg-ink px-3.5 py-2 text-xs font-medium text-white hover:bg-clay transition shadow-sm"
+                      className="rounded-xl bg-ink px-3 py-2 text-xs font-semibold text-white hover:bg-clay transition shadow-xs text-center active:scale-95 flex items-center justify-center"
                     >
-                      Download Proof ↓
+                      Download ↓
                     </a>
                   </>
                 )}
@@ -1995,15 +2210,15 @@ export default function Admin() {
                         await deleteScreenshotEarly(selectedScreenshotOrder.id);
                       }
                     }}
-                    className="rounded-xl border border-red-200 bg-red-50 px-3.5 py-2 text-xs font-medium text-red-700 hover:bg-red-600 hover:text-white transition cursor-pointer"
+                    className="flex-1 sm:flex-initial rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-600 hover:text-white transition cursor-pointer text-center"
                   >
-                    Delete Now (Save Storage)
+                    Delete Early
                   </button>
                 )}
                 <button
                   type="button"
                   onClick={() => setSelectedScreenshotOrder(null)}
-                  className="rounded-xl border border-[#8a61483a] bg-white px-4 py-2 text-xs font-medium text-ink hover:bg-stone-100 transition cursor-pointer"
+                  className="flex-1 sm:flex-initial rounded-xl border border-[#8a61483a] bg-white px-4 py-2 text-xs font-semibold text-ink hover:bg-stone-100 transition cursor-pointer text-center"
                 >
                   Close
                 </button>
@@ -2016,31 +2231,31 @@ export default function Admin() {
       {/* Product Edit Modal */}
       {editingProduct && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-3 sm:p-4 backdrop-blur-sm overflow-y-auto"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-2 sm:p-4 backdrop-blur-sm overflow-y-auto"
           onClick={closeEditingProduct}
         >
           <div
-            className="relative flex max-h-[94vh] w-full max-w-2xl flex-col rounded-3xl bg-[#fff8ed] shadow-2xl border border-[#8a61483a] overflow-hidden my-auto"
+            className="relative flex max-h-[96vh] sm:max-h-[94vh] w-full max-w-2xl flex-col rounded-2xl sm:rounded-3xl bg-[#fff8ed] shadow-2xl border border-[#8a61483a] overflow-hidden my-auto"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-[#8a614820] bg-[#f5ede0] px-5 sm:px-6 py-4">
-              <div>
+            <div className="flex items-center justify-between border-b border-[#8a614820] bg-[#f5ede0] px-4 sm:px-6 py-3.5 sm:py-4">
+              <div className="min-w-0 pr-2">
                 <div className="flex items-center gap-2">
-                  <span className="text-xl">✏️</span>
-                  <h3 className="display text-lg sm:text-xl text-ink font-bold">
+                  <span className="text-lg sm:text-xl shrink-0">✏️</span>
+                  <h3 className="display text-base sm:text-xl text-ink font-bold truncate">
                     Edit Candle: {editingProduct.name}
                   </h3>
                 </div>
-                <p className="text-xs text-[#765442] mt-0.5">
-                  Edits save directly to cloud database and sync immediately with the customer page.
+                <p className="text-[11px] sm:text-xs text-[#765442] mt-0.5 truncate">
+                  Edits save directly to cloud database & sync immediately with store.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={closeEditingProduct}
                 disabled={isSavingProduct}
-                className="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-full bg-white/90 text-lg font-bold text-[#765442] hover:bg-clay hover:text-white transition shadow-sm cursor-pointer disabled:opacity-50"
+                className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-full bg-white/90 text-base sm:text-lg font-bold text-[#765442] hover:bg-clay hover:text-white transition shadow-sm cursor-pointer disabled:opacity-50"
                 title="Close editor"
               >
                 ✕
@@ -2049,7 +2264,7 @@ export default function Admin() {
 
             {/* Modal Body / Form */}
             <form onSubmit={saveEditedProduct} className="flex flex-col flex-1 overflow-hidden">
-              <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4">
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
                 {/* Candle Name & Price */}
                 <div className="grid gap-3.5 sm:grid-cols-2">
                   <div>
@@ -2062,7 +2277,7 @@ export default function Admin() {
                       value={editForm.name}
                       onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
                       placeholder="e.g. Amber & Sandalwood"
-                      className="w-full rounded-xl border border-[#8a614830] bg-white px-3.5 py-2.5 text-sm text-ink outline-clay shadow-2xs font-medium"
+                      className="w-full rounded-xl border border-[#8a614830] bg-white px-3.5 py-2.5 text-base sm:text-sm text-ink outline-clay shadow-2xs font-medium"
                     />
                   </div>
 
@@ -2080,7 +2295,7 @@ export default function Admin() {
                         value={editForm.price}
                         onChange={(e) => setEditForm({ ...editForm, price: e.target.value })}
                         placeholder="e.g. 649"
-                        className="w-full rounded-xl border border-[#8a614830] bg-white pl-8 pr-3.5 py-2.5 text-sm font-bold text-ink outline-clay shadow-2xs"
+                        className="w-full rounded-xl border border-[#8a614830] bg-white pl-8 pr-3.5 py-2.5 text-base sm:text-sm font-bold text-ink outline-clay shadow-2xs"
                       />
                     </div>
                   </div>
@@ -2095,7 +2310,7 @@ export default function Admin() {
                     <select
                       value={editForm.category}
                       onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
-                      className="w-full rounded-xl border border-[#8a614830] bg-white px-3 py-2.5 text-sm text-ink outline-clay shadow-2xs"
+                      className="w-full rounded-xl border border-[#8a614830] bg-white px-3 py-2.5 text-base sm:text-sm text-ink outline-clay shadow-2xs cursor-pointer"
                     >
                       <option value="Jar candle">Jar candle</option>
                       <option value="Sculptural">Sculptural</option>
@@ -2113,7 +2328,7 @@ export default function Admin() {
                     <button
                       type="button"
                       onClick={() => setEditForm({ ...editForm, available: !editForm.available })}
-                      className={`flex items-center justify-between w-full rounded-xl border px-3.5 py-2.5 text-sm font-semibold transition shadow-2xs cursor-pointer ${
+                      className={`flex items-center justify-between w-full rounded-xl border px-3.5 py-2.5 text-base sm:text-sm font-semibold transition shadow-2xs cursor-pointer active:scale-95 ${
                         editForm.available
                           ? "border-emerald-300 bg-emerald-50 text-emerald-800"
                           : "border-stone-300 bg-stone-100 text-stone-600"
@@ -2133,14 +2348,14 @@ export default function Admin() {
                 </div>
 
                 {/* Removable / Tickable Specifications Section */}
-                <div className="rounded-2xl border border-[#8a614825] bg-[#fff6eb]/60 p-4">
+                <div className="rounded-2xl border border-[#8a614825] bg-[#fff6eb]/60 p-3.5 sm:p-4">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 border-b border-[#8a614815] pb-2.5 mb-3">
                     <div>
                       <h4 className="text-xs font-bold uppercase tracking-wider text-ink flex items-center gap-1.5">
-                        <span>⚙️</span> Candle Specifications & Details (Tick to Include)
+                        <span>⚙️</span> Candle Specifications (Tick to Include)
                       </h4>
                       <p className="text-[11px] text-[#765442] mt-0.5">
-                        Tick to include a detail. If ticked, it <b>must be filled</b>. If unticked, you cannot write in it and it will be removed from this candle.
+                        Tick to include. If ticked, it <b>must be filled</b>. If unticked, it cannot be written & will be removed.
                       </p>
                     </div>
                   </div>
@@ -2165,7 +2380,7 @@ export default function Admin() {
                             className="h-4 w-4 rounded accent-[#9b4a1b] cursor-pointer"
                           />
                           <span className="text-xs font-bold text-ink flex items-center gap-1.5">
-                            <span>🕯️</span> Wick Size <span className="text-[10px] font-normal text-[#765442]">(Wink size)</span>
+                            <span>🕯️</span> Wick Size <span className="text-[10px] font-normal text-[#765442]">(Wink)</span>
                           </span>
                         </div>
                         {editSpecsEnabled.wickSize ? (
@@ -2174,7 +2389,7 @@ export default function Admin() {
                           </span>
                         ) : (
                           <span className="rounded-md bg-stone-200 px-2 py-0.5 text-[10px] font-medium text-stone-600">
-                            ✕ Unticked (Excluded)
+                            ✕ Excluded
                           </span>
                         )}
                       </label>
@@ -2187,10 +2402,10 @@ export default function Admin() {
                           onChange={(e) => setEditForm({ ...editForm, wickSize: e.target.value })}
                           placeholder={
                             editSpecsEnabled.wickSize
-                              ? "e.g. 24-ply braided cotton wick or Double wood wick (Required)"
+                              ? "e.g. 24-ply braided cotton wick (Required)"
                               : "✕ Unticked - You cannot write here"
                           }
-                          className={`w-full rounded-lg px-3 py-2 text-sm transition-all ${
+                          className={`w-full rounded-lg px-3 py-2 text-base sm:text-sm transition-all ${
                             editSpecsEnabled.wickSize
                               ? "border border-[#8a614830] bg-white text-ink outline-clay font-medium"
                               : "border border-dashed border-stone-300 bg-stone-100/90 text-stone-400 cursor-not-allowed select-none"
@@ -2218,7 +2433,7 @@ export default function Admin() {
                             className="h-4 w-4 rounded accent-[#9b4a1b] cursor-pointer"
                           />
                           <span className="text-xs font-bold text-ink flex items-center gap-1.5">
-                            <span>📏</span> Candle Length & Breadth <span className="text-[10px] font-normal text-[#765442]">(Dimensions)</span>
+                            <span>📏</span> Length & Breadth <span className="text-[10px] font-normal text-[#765442]">(Dimensions)</span>
                           </span>
                         </div>
                         {editSpecsEnabled.candleDimensions ? (
@@ -2227,7 +2442,7 @@ export default function Admin() {
                           </span>
                         ) : (
                           <span className="rounded-md bg-stone-200 px-2 py-0.5 text-[10px] font-medium text-stone-600">
-                            ✕ Unticked (Excluded)
+                            ✕ Excluded
                           </span>
                         )}
                       </label>
@@ -2243,7 +2458,7 @@ export default function Admin() {
                               ? "e.g. 7.5 cm (L) × 7.5 cm (B) × 9 cm (H) (Required)"
                               : "✕ Unticked - You cannot write here"
                           }
-                          className={`w-full rounded-lg px-3 py-2 text-sm transition-all ${
+                          className={`w-full rounded-lg px-3 py-2 text-base sm:text-sm transition-all ${
                             editSpecsEnabled.candleDimensions
                               ? "border border-[#8a614830] bg-white text-ink outline-clay font-medium"
                               : "border border-dashed border-stone-300 bg-stone-100/90 text-stone-400 cursor-not-allowed select-none"
@@ -2271,7 +2486,7 @@ export default function Admin() {
                             className="h-4 w-4 rounded accent-[#9b4a1b] cursor-pointer"
                           />
                           <span className="text-xs font-bold text-ink flex items-center gap-1.5">
-                            <span>🌸</span> Fragrance <span className="text-[10px] font-normal text-[#765442]">(Scent notes)</span>
+                            <span>🌸</span> Fragrance <span className="text-[10px] font-normal text-[#765442]">(Scent)</span>
                           </span>
                         </div>
                         {editSpecsEnabled.fragrance ? (
@@ -2280,7 +2495,7 @@ export default function Admin() {
                           </span>
                         ) : (
                           <span className="rounded-md bg-stone-200 px-2 py-0.5 text-[10px] font-medium text-stone-600">
-                            ✕ Unticked (Excluded)
+                            ✕ Excluded
                           </span>
                         )}
                       </label>
@@ -2296,7 +2511,7 @@ export default function Admin() {
                               ? "e.g. French Vanilla, Lavender & Sandalwood (Required)"
                               : "✕ Unticked - You cannot write here"
                           }
-                          className={`w-full rounded-lg px-3 py-2 text-sm transition-all ${
+                          className={`w-full rounded-lg px-3 py-2 text-base sm:text-sm transition-all ${
                             editSpecsEnabled.fragrance
                               ? "border border-[#8a614830] bg-white text-ink outline-clay font-medium"
                               : "border border-dashed border-stone-300 bg-stone-100/90 text-stone-400 cursor-not-allowed select-none"
@@ -2333,7 +2548,7 @@ export default function Admin() {
                           </span>
                         ) : (
                           <span className="rounded-md bg-stone-200 px-2 py-0.5 text-[10px] font-medium text-stone-600">
-                            ✕ Unticked (Excluded)
+                            ✕ Excluded
                           </span>
                         )}
                       </label>
@@ -2349,7 +2564,7 @@ export default function Admin() {
                               ? "e.g. 35–40 hours (Required)"
                               : "✕ Unticked - You cannot write here"
                           }
-                          className={`w-full rounded-lg px-3 py-2 text-sm transition-all ${
+                          className={`w-full rounded-lg px-3 py-2 text-base sm:text-sm transition-all ${
                             editSpecsEnabled.burnTime
                               ? "border border-[#8a614830] bg-white text-ink outline-clay font-medium"
                               : "border border-dashed border-stone-300 bg-stone-100/90 text-stone-400 cursor-not-allowed select-none"
@@ -2386,7 +2601,7 @@ export default function Admin() {
                           </span>
                         ) : (
                           <span className="rounded-md bg-stone-200 px-2 py-0.5 text-[10px] font-medium text-stone-600">
-                            ✕ Unticked (Excluded)
+                            ✕ Excluded
                           </span>
                         )}
                       </label>
@@ -2402,7 +2617,7 @@ export default function Admin() {
                               ? "e.g. 100% Pure Soy Wax, Organic Essential Oils (Required)"
                               : "✕ Unticked - You cannot write here"
                           }
-                          className={`w-full rounded-lg px-3 py-2 text-sm transition-all ${
+                          className={`w-full rounded-lg px-3 py-2 text-base sm:text-sm transition-all ${
                             editSpecsEnabled.ingredients
                               ? "border border-[#8a614830] bg-white text-ink outline-clay font-medium"
                               : "border border-dashed border-stone-300 bg-stone-100/90 text-stone-400 cursor-not-allowed select-none"
@@ -2430,7 +2645,7 @@ export default function Admin() {
                             className="h-4 w-4 rounded accent-[#9b4a1b] cursor-pointer"
                           />
                           <span className="text-xs font-bold text-ink flex items-center gap-1.5">
-                            <span>📝</span> Description & Story <span className="text-[10px] font-normal text-[#765442]">(Scent & mood)</span>
+                            <span>📝</span> Description <span className="text-[10px] font-normal text-[#765442]">(Scent & mood)</span>
                           </span>
                         </div>
                         {editSpecsEnabled.description ? (
@@ -2439,7 +2654,7 @@ export default function Admin() {
                           </span>
                         ) : (
                           <span className="rounded-md bg-stone-200 px-2 py-0.5 text-[10px] font-medium text-stone-600">
-                            ✕ Unticked (Excluded)
+                            ✕ Excluded
                           </span>
                         )}
                       </label>
@@ -2455,7 +2670,7 @@ export default function Admin() {
                               ? "Write evocative notes about this candle's scent, feel, and mood... (Required)"
                               : "✕ Unticked - You cannot write here"
                           }
-                          className={`w-full rounded-lg px-3 py-2 text-sm transition-all resize-y ${
+                          className={`w-full rounded-lg px-3 py-2 text-base sm:text-sm transition-all resize-y ${
                             editSpecsEnabled.description
                               ? "border border-[#8a614830] bg-white text-ink outline-clay font-medium"
                               : "border border-dashed border-stone-300 bg-stone-100/90 text-stone-400 cursor-not-allowed select-none"
@@ -2467,19 +2682,19 @@ export default function Admin() {
                 </div>
 
                 {/* Product Photos Section */}
-                <div className="rounded-2xl border border-[#8a614820] bg-white/70 p-4 space-y-3">
-                  <div className="flex items-center justify-between">
+                <div className="rounded-2xl border border-[#8a614820] bg-white/70 p-3.5 sm:p-4 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div>
                       <h4 className="text-xs font-bold uppercase tracking-wider text-ink">
                         Photos ({editForm.images.length})
                       </h4>
                       <p className="text-[11px] text-[#765442]">
-                        First photo is the main cover. Click &quot;Make Cover&quot; to set.
+                        First photo is the cover. Tap &quot;Make Cover&quot; to set.
                       </p>
                     </div>
 
-                    <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-clay bg-[#f8ede0] px-3 py-1.5 text-xs font-medium text-clay hover:bg-clay hover:text-white transition shadow-2xs">
-                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <label className="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-clay bg-[#f8ede0] px-3.5 py-2.5 text-xs font-semibold text-clay hover:bg-clay hover:text-white transition shadow-2xs w-full sm:w-auto active:scale-95">
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                       </svg>
                       <span>Upload from Device</span>
@@ -2531,19 +2746,19 @@ export default function Admin() {
                   </div>
 
                   {/* Add by URL option */}
-                  <div className="flex gap-2 pt-2 border-t border-[#8a614815]">
+                  <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t border-[#8a614815]">
                     <input
                       type="url"
                       value={editNewImageUrl}
                       onChange={(e) => setEditNewImageUrl(e.target.value)}
                       placeholder="Or paste an image URL (https://...)"
-                      className="flex-1 rounded-lg border border-[#8a614830] bg-white px-3 py-1.5 text-xs text-ink outline-clay"
+                      className="flex-1 rounded-xl border border-[#8a614830] bg-white px-3 py-2 text-base sm:text-xs text-ink outline-clay"
                     />
                     <button
                       type="button"
                       onClick={addEditImageUrl}
                       disabled={!editNewImageUrl.trim()}
-                      className="rounded-lg bg-[#f5ede0] border border-[#8a614830] px-3 py-1.5 text-xs font-semibold text-clay hover:bg-clay hover:text-white transition disabled:opacity-50 cursor-pointer"
+                      className="rounded-xl bg-[#f5ede0] border border-[#8a614830] px-3.5 py-2 text-xs font-semibold text-clay hover:bg-clay hover:text-white transition disabled:opacity-50 cursor-pointer text-center shrink-0 active:scale-95"
                     >
                       + Add URL
                     </button>
@@ -2552,12 +2767,12 @@ export default function Admin() {
               </div>
 
               {/* Modal Footer Controls */}
-              <div className="flex items-center justify-between gap-3 border-t border-[#8a614820] bg-[#f5ede0] px-5 sm:px-6 py-4">
+              <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3 border-t border-[#8a614820] bg-[#f5ede0] px-4 sm:px-6 py-3.5 sm:py-4">
                 <button
                   type="button"
                   onClick={closeEditingProduct}
                   disabled={isSavingProduct}
-                  className="rounded-xl border border-[#8a61483a] bg-white px-4 py-2.5 text-xs sm:text-sm font-medium text-[#765442] hover:bg-stone-100 transition cursor-pointer disabled:opacity-50"
+                  className="rounded-xl border border-[#8a61483a] bg-white px-4 py-2.5 text-sm font-semibold text-[#765442] hover:bg-stone-100 transition cursor-pointer disabled:opacity-50 text-center"
                 >
                   Cancel
                 </button>
@@ -2565,7 +2780,7 @@ export default function Admin() {
                 <button
                   type="submit"
                   disabled={isSavingProduct}
-                  className="flex items-center gap-2 rounded-xl bg-ink px-6 py-2.5 text-xs sm:text-sm font-bold text-white hover:bg-clay transition shadow-md cursor-pointer disabled:opacity-50"
+                  className="flex items-center justify-center gap-2 rounded-xl bg-ink px-6 py-3 text-sm font-bold text-white hover:bg-clay transition shadow-md cursor-pointer disabled:opacity-50 text-center active:scale-[0.98]"
                 >
                   {isSavingProduct ? (
                     <>
