@@ -56,7 +56,7 @@ export default async function Home() {
               </div>
             </div>
 
-            {/* Real Aesthetic Lit Candle with atmospheric warm flame glow */}
+            {/* Candlemate Artisanal Logo Candles with living flame and playful wink */}
             <HeroCandle />
           </div>
         </section>
