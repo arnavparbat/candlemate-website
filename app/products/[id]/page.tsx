@@ -3,7 +3,7 @@
 import { Header } from "@/components/header";
 import { useCart } from "@/components/cart-context";
 import { Product } from "@/lib/types";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 
@@ -22,6 +22,11 @@ export default function ProductPage() {
   const [quantity, setQuantity] = useState(1);
   const [justAdded, setJustAdded] = useState(false);
   const { add } = useCart();
+
+  // Mobile Touch Swipe Gesture States
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const [touchEndX, setTouchEndX] = useState<number | null>(null);
+  const minSwipeDistance = 40; // minimum swipe distance in px
 
   useEffect(() => {
     if (!id) return;
@@ -47,12 +52,6 @@ export default function ProductPage() {
       });
   }, [id]);
 
-  useEffect(() => {
-    if (!product || !product.images || product.images.length < 2) return;
-    const t = setInterval(() => setPhoto((p) => (p + 1) % product.images.length), 3500);
-    return () => clearInterval(t);
-  }, [product]);
-
   if (!product || !product.images) {
     return (
       <>
@@ -67,6 +66,45 @@ export default function ProductPage() {
     );
   }
 
+  // Touch Swipe Gesture Handlers
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchEndX(null);
+    setTouchStartX(e.targetTouches[0].clientX);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    setTouchEndX(e.targetTouches[0].clientX);
+  };
+
+  const handleTouchEnd = () => {
+    if (touchStartX === null || touchEndX === null) return;
+    const distance = touchStartX - touchEndX;
+
+    if (product.images.length > 1) {
+      if (distance > minSwipeDistance) {
+        // Swiped Left -> Show next image
+        setPhoto((p) => (p + 1) % product.images.length);
+      } else if (distance < -minSwipeDistance) {
+        // Swiped Right -> Show previous image
+        setPhoto((p) => (p - 1 + product.images.length) % product.images.length);
+      }
+    }
+    setTouchStartX(null);
+    setTouchEndX(null);
+  };
+
+  const nextPhoto = () => {
+    if (product.images.length > 1) {
+      setPhoto((p) => (p + 1) % product.images.length);
+    }
+  };
+
+  const prevPhoto = () => {
+    if (product.images.length > 1) {
+      setPhoto((p) => (p - 1 + product.images.length) % product.images.length);
+    }
+  };
+
   const handleAdd = () => {
     if (!product || !product.available) return;
     for (let i = 0; i < quantity; i++) {
@@ -78,19 +116,19 @@ export default function ProductPage() {
 
   // Active Specifications List
   const activeSpecs = [
-    product.fragrance ? { label: "Fragrance Notes", value: product.fragrance, icon: "🌸" } : null,
-    product.wickSize ? { label: "Wick Size", value: product.wickSize, icon: "🕯️" } : null,
-    product.candleDimensions ? { label: "Dimensions (L × B)", value: product.candleDimensions, icon: "📏" } : null,
+    product.fragrance ? { label: "Scent", value: product.fragrance, icon: "🌸" } : null,
     product.burnTime ? { label: "Burn Time", value: product.burnTime, icon: "⏳" } : null,
-    product.ingredients ? { label: "Wax & Ingredients", value: product.ingredients, icon: "🌿" } : null,
+    product.wickSize ? { label: "Wick", value: product.wickSize, icon: "🕯️" } : null,
+    product.candleDimensions ? { label: "Dimensions", value: product.candleDimensions, icon: "📏" } : null,
+    product.ingredients ? { label: "Wax", value: product.ingredients, icon: "🌿" } : null,
   ].filter(Boolean) as { label: string; value: string; icon: string }[];
 
   return (
     <>
       <Header />
-      <main className="mx-auto max-w-5xl px-3.5 sm:px-6 py-4 sm:py-8">
+      <main className="mx-auto max-w-5xl px-3.5 sm:px-6 py-3.5 sm:py-8">
         {/* Navigation Breadcrumb */}
-        <div className="flex items-center justify-between gap-2 mb-3 sm:mb-6">
+        <div className="flex items-center justify-between gap-2 mb-3 sm:mb-5">
           <Link
             href="/"
             className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-[#765442] hover:text-ink transition active:scale-95 py-1"
@@ -104,37 +142,81 @@ export default function ProductPage() {
         </div>
 
         {/* ==================================================== */}
-        {/* MOBILE & DESKTOP PRODUCT HERO SECTION                */}
-        {/* On mobile: compact image on left, buy section on right*/}
-        {/* On desktop: balanced 2-column showcase               */}
+        {/* PRODUCT CONTAINER                                    */}
+        {/* Mobile: Big visual candle photo with touch swiping   */}
+        {/* Desktop: 2-column balanced showcase                  */}
         {/* ==================================================== */}
-        <div className="grid grid-cols-[145px_1fr] xs:grid-cols-[165px_1fr] md:grid-cols-2 gap-3 sm:gap-6 md:gap-10 items-start">
-          {/* LEFT: Compact Responsive Image Showcase */}
-          <div className="space-y-2">
-            <div className="relative aspect-square md:aspect-[4/5] max-h-[320px] md:max-h-[460px] w-full overflow-hidden rounded-2xl sm:rounded-3xl bg-[#ead1ad] shadow-sm border border-[#5c392715]">
+        <div className="grid gap-4 sm:gap-6 md:grid-cols-2 md:gap-10 items-start">
+          {/* ==================================================== */}
+          {/* 1. BIG CANDLE IMAGE WITH TOUCH SWIPE GESTURES        */}
+          {/* ==================================================== */}
+          <div className="w-full max-w-sm sm:max-w-md md:max-w-none mx-auto space-y-2.5">
+            <div
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+              className="relative aspect-square sm:aspect-[4/5] w-full overflow-hidden rounded-3xl bg-[#ead1ad] shadow-md border border-[#5c392718] select-none cursor-grab active:cursor-grabbing"
+            >
               <img
                 src={product.images[photo]}
                 alt={product.name}
-                className="h-full w-full object-cover transition duration-500"
+                className="h-full w-full object-cover transition-opacity duration-300 pointer-events-none"
+                draggable={false}
               />
 
-              {/* Sold out badge overlay */}
+              {/* Sold out overlay badge */}
               {!product.available && (
-                <span className="absolute top-2 left-2 sm:top-3 sm:left-3 rounded-full bg-ink/90 backdrop-blur-xs px-2.5 py-0.5 text-[10px] font-bold text-white uppercase tracking-wider">
+                <span className="absolute top-3 left-3 rounded-full bg-ink/90 backdrop-blur-xs px-3 py-1 text-[10px] font-bold text-white uppercase tracking-wider shadow-sm">
                   Sold out
                 </span>
               )}
 
-              {/* Photo indicators for multi-images */}
+              {/* Photo counter & Mobile Swipe Hint Badge */}
               {product.images.length > 1 && (
-                <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-1.5 sm:gap-2">
+                <div className="absolute top-3 right-3 flex items-center gap-1 rounded-full bg-black/50 backdrop-blur-xs text-white px-2.5 py-1 text-[10px] font-mono font-bold shadow-xs">
+                  <span>{photo + 1}/{product.images.length}</span>
+                  <span className="hidden xs:inline opacity-80">· 👈 Swipe 👉</span>
+                </div>
+              )}
+
+              {/* Arrow navigation buttons for easy tapping */}
+              {product.images.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      prevPhoto();
+                    }}
+                    className="absolute left-2.5 top-1/2 -translate-y-1/2 h-8 w-8 sm:h-9 sm:w-9 rounded-full bg-black/40 hover:bg-black/70 text-white flex items-center justify-center backdrop-blur-xs text-base font-bold active:scale-90 transition shadow-sm cursor-pointer"
+                    aria-label="Previous photo"
+                  >
+                    ‹
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      nextPhoto();
+                    }}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 h-8 w-8 sm:h-9 sm:w-9 rounded-full bg-black/40 hover:bg-black/70 text-white flex items-center justify-center backdrop-blur-xs text-base font-bold active:scale-90 transition shadow-sm cursor-pointer"
+                    aria-label="Next photo"
+                  >
+                    ›
+                  </button>
+                </>
+              )}
+
+              {/* Bottom Dot Indicators */}
+              {product.images.length > 1 && (
+                <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5">
                   {product.images.map((_, i) => (
                     <button
                       key={i}
                       type="button"
                       onClick={() => setPhoto(i)}
-                      className={`h-1.5 rounded-full transition-all ${
-                        i === photo ? "w-4 sm:w-6 bg-white shadow-xs" : "w-1.5 bg-white/60"
+                      className={`h-1.5 rounded-full transition-all cursor-pointer ${
+                        i === photo ? "w-5 bg-white shadow-xs" : "w-1.5 bg-white/60 hover:bg-white/90"
                       }`}
                       aria-label={`View photo ${i + 1}`}
                     />
@@ -143,18 +225,18 @@ export default function ProductPage() {
               )}
             </div>
 
-            {/* Thumbnail selector gallery (shown on desktop or when multiple photos) */}
+            {/* Thumbnails Gallery Strip */}
             {product.images.length > 1 && (
-              <div className="hidden sm:flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+              <div className="flex items-center justify-center sm:justify-start gap-2 overflow-x-auto pb-1 no-scrollbar">
                 {product.images.map((img, idx) => (
                   <button
                     key={idx}
                     type="button"
                     onClick={() => setPhoto(idx)}
-                    className={`h-12 w-12 rounded-xl overflow-hidden border-2 transition-all shrink-0 cursor-pointer ${
+                    className={`h-12 w-12 sm:h-14 sm:w-14 rounded-2xl overflow-hidden border-2 transition-all shrink-0 cursor-pointer ${
                       idx === photo
-                        ? "border-clay shadow-xs scale-105"
-                        : "border-transparent opacity-70 hover:opacity-100"
+                        ? "border-clay shadow-sm scale-105"
+                        : "border-transparent opacity-60 hover:opacity-100"
                     }`}
                   >
                     <img src={img} alt="" className="h-full w-full object-cover" />
@@ -164,181 +246,165 @@ export default function ProductPage() {
             )}
           </div>
 
-          {/* RIGHT: Product Info & Immediate "Add to Bag" on Right of Image */}
-          <div className="flex flex-col justify-between min-w-0">
-            <div>
-              {/* Category pill (Mobile & Desktop) */}
-              <span className="hidden md:inline-block text-[11px] font-bold uppercase tracking-[.18em] text-clay bg-[#8a614815] px-2.5 py-0.5 rounded-full mb-2">
-                {product.category}
-              </span>
-
-              {/* Title */}
-              <h1 className="display text-base xs:text-lg sm:text-2xl md:text-4xl font-bold text-ink leading-tight tracking-tight">
-                {product.name}
-              </h1>
-
-              {/* Price & Stock status */}
-              <div className="mt-1.5 sm:mt-3 flex items-baseline gap-2 flex-wrap">
-                <span className="text-lg xs:text-xl sm:text-2xl md:text-3xl font-black text-clay">
-                  ₹{product.price}
+          {/* ==================================================== */}
+          {/* 2. PRODUCT DETAILS & ACTION SECTION                  */}
+          {/* ==================================================== */}
+          <div className="space-y-3.5 sm:space-y-5">
+            {/* Header: Title, Category, Price & Live Stock */}
+            <div className="space-y-1 sm:space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] sm:text-xs font-bold uppercase tracking-[.18em] text-clay bg-[#8a614815] px-2.5 py-0.5 rounded-full">
+                  {product.category}
                 </span>
-                <span className="text-[10px] sm:text-xs font-semibold text-[#765442]/80">
-                  incl. all taxes
+
+                {/* Stock Indicator */}
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold">
+                  <span
+                    className={`h-2 w-2 rounded-full ${
+                      product.available ? "bg-emerald-500 animate-pulse" : "bg-stone-400"
+                    }`}
+                  />
+                  <span className={product.available ? "text-emerald-800" : "text-stone-500"}>
+                    {product.available ? "In stock" : "Sold out"}
+                  </span>
                 </span>
               </div>
 
-              {/* Live stock badge */}
-              <div className="mt-1 sm:mt-2 flex items-center gap-1.5 text-[11px] sm:text-xs">
-                <span
-                  className={`h-2 w-2 rounded-full ${
-                    product.available ? "bg-emerald-500 animate-pulse" : "bg-stone-400"
-                  }`}
-                />
-                <span className={product.available ? "text-emerald-800 font-semibold" : "text-stone-500 font-medium"}>
-                  {product.available ? "In stock · Ready to dispatch" : "Currently out of stock"}
+              <h1 className="display text-xl sm:text-3xl md:text-4xl font-bold text-ink leading-snug tracking-tight">
+                {product.name}
+              </h1>
+
+              <div className="flex items-baseline gap-2 pt-0.5">
+                <span className="text-2xl sm:text-3xl font-black text-clay">
+                  ₹{product.price}
+                </span>
+                <span className="text-xs text-[#765442]/80 font-medium">
+                  natural soy wax · incl. taxes
                 </span>
               </div>
             </div>
 
-            {/* ACTION SECTION: Quantity Selector & "Add to Bag" button right on the right of image */}
-            <div className="mt-3 sm:mt-5 space-y-2">
-              {product.available && (
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-[#765442] hidden xs:inline">
-                    Qty:
-                  </span>
-                  <div className="inline-flex items-center rounded-xl border border-[#8a614830] bg-white p-0.5 shadow-2xs">
+            {/* ACTION ROW: Quantity Selector + High Visibility "+ Add to Bag" */}
+            <div className="space-y-2 pt-1">
+              <div className="flex items-center gap-2.5">
+                {product.available && (
+                  <div className="inline-flex items-center rounded-2xl border border-[#8a614830] bg-white p-1 shadow-2xs shrink-0">
                     <button
                       type="button"
                       onClick={() => setQuantity((q) => Math.max(1, q - 1))}
                       disabled={quantity <= 1}
-                      className="h-7 w-7 flex items-center justify-center rounded-lg text-xs font-bold text-[#765442] hover:bg-stone-100 disabled:opacity-30 cursor-pointer active:scale-95"
+                      className="h-8 w-8 flex items-center justify-center rounded-xl text-sm font-bold text-[#765442] hover:bg-stone-100 disabled:opacity-30 cursor-pointer active:scale-95"
                     >
                       –
                     </button>
-                    <span className="w-7 text-center font-mono font-bold text-xs text-ink">
+                    <span className="w-8 text-center font-mono font-bold text-sm text-ink">
                       {quantity}
                     </span>
                     <button
                       type="button"
                       onClick={() => setQuantity((q) => Math.min(10, q + 1))}
-                      className="h-7 w-7 flex items-center justify-center rounded-lg text-xs font-bold text-[#765442] hover:bg-stone-100 cursor-pointer active:scale-95"
+                      className="h-8 w-8 flex items-center justify-center rounded-xl text-sm font-bold text-[#765442] hover:bg-stone-100 cursor-pointer active:scale-95"
                     >
                       +
                     </button>
                   </div>
+                )}
+
+                {/* Main Add to Bag Button */}
+                <button
+                  type="button"
+                  disabled={!product.available}
+                  onClick={handleAdd}
+                  className={`flex-1 rounded-2xl py-3 px-5 text-sm font-bold transition-all shadow-md active:scale-95 cursor-pointer flex items-center justify-center gap-2 ${
+                    !product.available
+                      ? "cursor-not-allowed bg-stone-300 text-stone-600"
+                      : justAdded
+                      ? "bg-emerald-700 text-white scale-[1.01] ring-4 ring-emerald-600/30 shadow-lg"
+                      : "bg-ink hover:bg-clay text-cream hover:shadow-lg"
+                  }`}
+                >
+                  <span>
+                    {!product.available
+                      ? "Sold out"
+                      : justAdded
+                      ? "✓ Added to bag!"
+                      : "+ Add to bag"}
+                  </span>
+                  {product.available && !justAdded && (
+                    <span className="opacity-90 font-mono text-xs">
+                      · ₹{product.price * quantity}
+                    </span>
+                  )}
+                </button>
+              </div>
+
+              {/* Added to Bag Confirmation Toast */}
+              {justAdded && (
+                <div className="flex items-center justify-between gap-2 rounded-2xl bg-emerald-50 border border-emerald-200 p-3 text-xs text-emerald-900 shadow-sm animate-in fade-in">
+                  <div className="flex items-center gap-1.5">
+                    <span>✓</span>
+                    <span className="font-semibold">
+                      <b>{quantity}× {product.name}</b> in your bag
+                    </span>
+                  </div>
+                  <Link
+                    href="/cart"
+                    className="font-bold underline text-clay hover:text-ink shrink-0 active:scale-95 transition"
+                  >
+                    View Bag & Checkout →
+                  </Link>
                 </div>
               )}
+            </div>
 
-              {/* Direct Add to Bag Button */}
-              <button
-                type="button"
-                disabled={!product.available}
-                onClick={handleAdd}
-                className={`w-full rounded-2xl py-2.5 sm:py-3.5 px-4 text-xs sm:text-sm font-bold transition-all shadow-md active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 ${
-                  !product.available
-                    ? "cursor-not-allowed bg-stone-300 text-stone-600"
-                    : justAdded
-                    ? "bg-emerald-700 text-white scale-[1.02] ring-4 ring-emerald-600/30 shadow-lg"
-                    : "bg-ink hover:bg-clay text-cream hover:shadow-lg"
-                }`}
-              >
-                <span>
-                  {!product.available
-                    ? "Sold out"
-                    : justAdded
-                    ? "✓ Added to bag!"
-                    : "+ Add to bag"}
+            {/* ==================================================== */}
+            {/* COMPACT DESCRIPTION (Fitted neatly without bloat)    */}
+            {/* ==================================================== */}
+            {product.description && (
+              <div className="rounded-2xl bg-white/80 border border-[#5c392715] p-3.5 text-xs sm:text-sm leading-relaxed text-ink/90 font-serif shadow-2xs space-y-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#765442] block font-sans">
+                  Maker&apos;s Scent Notes
                 </span>
-                {product.available && !justAdded && (
-                  <span className="text-xs opacity-90 hidden sm:inline">
-                    (₹{product.price * quantity})
-                  </span>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* ==================================================== */}
-        {/* ADDED TO BAG CONFIRMATION TOAST BANNER               */}
-        {/* ==================================================== */}
-        {justAdded && (
-          <div className="mt-3.5 flex items-center justify-between gap-2 rounded-2xl bg-emerald-50 border border-emerald-200 p-3 sm:p-4 text-xs sm:text-sm text-emerald-900 shadow-sm animate-in fade-in">
-            <div className="flex items-center gap-2">
-              <span className="text-base">🕯️</span>
-              <span className="font-semibold">
-                <b>{quantity}× {product.name}</b> added to your bag!
-              </span>
-            </div>
-            <Link
-              href="/cart"
-              className="font-bold underline text-clay hover:text-ink shrink-0 active:scale-95 transition"
-            >
-              View bag & checkout →
-            </Link>
-          </div>
-        )}
-
-        {/* ==================================================== */}
-        {/* FULL-WIDTH ARTISANAL DETAILS & DESCRIPTION SECTION   */}
-        {/* ==================================================== */}
-        <div className="mt-5 sm:mt-8 space-y-4 sm:space-y-6">
-          {/* Description Card */}
-          {product.description && (
-            <div className="rounded-2xl sm:rounded-3xl bg-white/85 border border-[#5c392715] p-4 sm:p-6 shadow-2xs space-y-1.5">
-              <h3 className="text-xs font-bold uppercase tracking-[.18em] text-[#765442]">
-                About this candle
-              </h3>
-              <p className="text-xs sm:text-base leading-relaxed text-ink/90 font-serif">
-                {product.description}
-              </p>
-            </div>
-          )}
-
-          {/* Specifications Grid */}
-          {activeSpecs.length > 0 && (
-            <div className="rounded-2xl sm:rounded-3xl bg-white/85 border border-[#5c392715] p-4 sm:p-6 shadow-2xs space-y-3">
-              <h3 className="text-xs font-bold uppercase tracking-[.18em] text-[#765442]">
-                Candle Specifications
-              </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 sm:gap-4">
-                {activeSpecs.map((spec, idx) => (
-                  <div
-                    key={idx}
-                    className="rounded-xl border border-[#8a614815] bg-[#fffaf3] p-3 flex items-start gap-2.5"
-                  >
-                    <span className="text-lg shrink-0">{spec.icon}</span>
-                    <div className="min-w-0">
-                      <dt className="text-[10px] font-bold uppercase tracking-wider text-[#765442]">
-                        {spec.label}
-                      </dt>
-                      <dd className="mt-0.5 text-xs sm:text-sm font-semibold text-ink break-words">
-                        {spec.value}
-                      </dd>
-                    </div>
-                  </div>
-                ))}
+                <p className="line-clamp-3 sm:line-clamp-none">
+                  {product.description}
+                </p>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Studio Guarantee / Craftsmanship Badge Row */}
-          <div className="grid grid-cols-3 gap-2 sm:gap-4 pt-1">
-            <div className="rounded-2xl border border-[#8a614818] bg-white/70 p-2.5 sm:p-3.5 text-center">
-              <span className="text-base sm:text-xl block mb-1">🌿</span>
-              <p className="font-bold text-ink text-[11px] sm:text-xs">100% Plant Wax</p>
-              <p className="text-[10px] text-[#765442] hidden sm:block mt-0.5">Clean natural soy burn</p>
-            </div>
-            <div className="rounded-2xl border border-[#8a614818] bg-white/70 p-2.5 sm:p-3.5 text-center">
-              <span className="text-base sm:text-xl block mb-1">🕯️</span>
-              <p className="font-bold text-ink text-[11px] sm:text-xs">Hand-Poured</p>
-              <p className="text-[10px] text-[#765442] hidden sm:block mt-0.5">Crafted in small batches</p>
-            </div>
-            <div className="rounded-2xl border border-[#8a614818] bg-white/70 p-2.5 sm:p-3.5 text-center">
-              <span className="text-base sm:text-xl block mb-1">📦</span>
-              <p className="font-bold text-ink text-[11px] sm:text-xs">Careful Transit</p>
-              <p className="text-[10px] text-[#765442] hidden sm:block mt-0.5">Eco-friendly protected pack</p>
+            {/* ==================================================== */}
+            {/* COMPACT SPECIFICATIONS PILLS (Micro-badges)          */}
+            {/* ==================================================== */}
+            {activeSpecs.length > 0 && (
+              <div className="space-y-1.5 pt-0.5">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#765442] block">
+                  Specifications
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {activeSpecs.map((spec, idx) => (
+                    <div
+                      key={idx}
+                      className="inline-flex items-center gap-1 rounded-xl bg-[#fffaf3] border border-[#8a614820] px-2.5 py-1 text-[11px] font-semibold text-ink shadow-2xs"
+                    >
+                      <span>{spec.icon}</span>
+                      <span className="text-[#765442]">{spec.label}:</span>
+                      <span className="font-bold text-ink">{spec.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Quick Studio Assurance Badge */}
+            <div className="flex items-center justify-between text-[10px] sm:text-xs text-[#765442] pt-2 border-t border-[#8a614815]">
+              <span className="flex items-center gap-1 font-medium">
+                <span>🌿</span> 100% Plant Soy Wax
+              </span>
+              <span className="flex items-center gap-1 font-medium">
+                <span>🕯️</span> Hand-Poured Batches
+              </span>
+              <span className="flex items-center gap-1 font-medium">
+                <span>📦</span> Protected Transit
+              </span>
             </div>
           </div>
         </div>
