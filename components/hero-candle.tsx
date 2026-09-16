@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 
 export function HeroCandle() {
   const [isWinking, setIsWinking] = useState(false);
@@ -27,12 +28,14 @@ export function HeroCandle() {
   }, [triggerWink]);
 
   return (
-    <div
+    <Link
+      href="/admin/login"
       onClick={triggerWink}
       onMouseEnter={triggerWink}
-      role="img"
-      aria-label="Candlemate brand logo candles with living flame and playful wink"
-      className="relative mx-auto flex flex-col items-center justify-center w-full max-w-[150px] xs:max-w-[185px] sm:max-w-[260px] md:max-w-[300px] cursor-pointer select-none transition-transform active:scale-95 group"
+      role="link"
+      title="Candlemate Studio Login"
+      aria-label="Open Candlemate studio login"
+      className="relative mx-auto flex flex-col items-center justify-center w-full max-w-[150px] xs:max-w-[185px] sm:max-w-[260px] md:max-w-[300px] cursor-pointer select-none transition-transform active:scale-95 group block"
     >
       {/* Warm Ambient Radial Glow behind the candles */}
       <motion.div
@@ -393,6 +396,6 @@ export function HeroCandle() {
         <div className="absolute bottom-1 left-[22%] w-[18%] h-2.5 rounded-[50%] bg-[#2e1408]/15 blur-[4px] pointer-events-none" />
         <div className="absolute bottom-1 left-[58%] w-[16%] h-2 rounded-[50%] bg-[#2e1408]/15 blur-[3.5px] pointer-events-none" />
       </div>
-    </div>
+    </Link>
   );
 }
