@@ -31,7 +31,7 @@ export function ProductCollection({
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
 
-  // Touch Swipe Gesture tracking for floating bar and drawer
+  // Touch Swipe Gesture tracking
   const touchStartPos = useRef<{ x: number; y: number } | null>(null);
 
   // Sync products and categories in background
@@ -132,15 +132,15 @@ export function ProductCollection({
     );
   }, [products, selectedCategory]);
 
-  // Swipe gestures for floating collection bar (swipe right -> open)
-  const handleBarTouchStart = (e: React.TouchEvent) => {
+  // Swipe gestures for bottom pill and inline bar (swipe right -> open drawer)
+  const handlePillTouchStart = (e: React.TouchEvent) => {
     touchStartPos.current = {
       x: e.touches[0].clientX,
       y: e.touches[0].clientY,
     };
   };
 
-  const handleBarTouchEnd = (e: React.TouchEvent) => {
+  const handlePillTouchEnd = (e: React.TouchEvent) => {
     if (!touchStartPos.current) return;
     const diffX = e.changedTouches[0].clientX - touchStartPos.current.x;
     const diffY = Math.abs(e.changedTouches[0].clientY - touchStartPos.current.y);
@@ -185,21 +185,36 @@ export function ProductCollection({
   return (
     <div className="space-y-4 sm:space-y-6">
       {/* ==================================================== */}
-      {/* 1. MIDDLE-LEFTMOST FLOATING COLLECTION BAR           */}
+      {/* 1. NON-INTRUSIVE BOTTOM FLOATING PILL                */}
+      {/* Sits comfortably centered at bottom with zero       */}
+      {/* interference with left or right product columns     */}
       {/* ==================================================== */}
       <div
-        onTouchStart={handleBarTouchStart}
-        onTouchEnd={handleBarTouchEnd}
+        onTouchStart={handlePillTouchStart}
+        onTouchEnd={handlePillTouchEnd}
         onClick={() => setIsDrawerOpen(true)}
-        className="fixed left-0 top-1/2 -translate-y-1/2 z-40 flex items-center gap-2 rounded-r-2xl bg-[#2d1b16]/95 hover:bg-clay text-cream pl-2.5 pr-3.5 py-3 shadow-2xl border-y border-r border-[#8a614850] backdrop-blur-md cursor-pointer select-none transition-all duration-200 active:scale-95 group"
+        className={`fixed bottom-5 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 rounded-full bg-[#2d1b16]/95 hover:bg-clay text-cream px-4 py-2.5 shadow-2xl border border-[#8a614850] backdrop-blur-md cursor-pointer select-none transition-all duration-300 active:scale-95 group ${
+          isDrawerOpen ? "opacity-0 pointer-events-none translate-y-4" : "opacity-100 translate-y-0"
+        }`}
         role="button"
-        title="Swipe or tap to open collections"
+        title="Swipe right or tap to open collections"
         aria-label="Browse candle collections"
       >
-        {/* Animated Arrow Icon pointing right */}
-        <div className="flex h-6 w-6 sm:h-7 sm:w-7 items-center justify-center rounded-full bg-clay/50 text-cream group-hover:bg-cream group-hover:text-ink transition-colors shrink-0">
+        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-clay/50 text-cream text-xs">
+          🕯️
+        </span>
+        <span className="text-xs font-bold uppercase tracking-wider text-cream font-sans">
+          {selectedCategory === "All" ? "Collections" : selectedCategory}
+        </span>
+        <span className="rounded-full bg-white/20 px-1.5 py-0.2 text-[10px] font-mono font-bold text-cream">
+          {filteredProducts.length}
+        </span>
+        <div className="flex items-center gap-1 text-clay text-xs pl-1 border-l border-white/20">
+          <span className="text-[10px] text-[#dfb15b] font-mono font-semibold">
+            Swipe
+          </span>
           <svg
-            className="h-3.5 w-3.5 sm:h-4 sm:w-4 transform transition-transform group-hover:translate-x-0.5 group-active:translate-x-1"
+            className="h-3.5 w-3.5 text-[#dfb15b] transform transition-transform group-hover:translate-x-0.5 group-active:translate-x-1 animate-pulse"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -207,20 +222,58 @@ export function ProductCollection({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
           </svg>
         </div>
+      </div>
 
-        {/* Text and swipe hint */}
-        <div className="flex flex-col text-left leading-none">
-          <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-cream font-sans">
-            Collections
+      {/* ==================================================== */}
+      {/* 2. INLINE ARTISANAL COLLECTION BAR (Above Products)  */}
+      {/* ==================================================== */}
+      <div
+        onTouchStart={handlePillTouchStart}
+        onTouchEnd={handlePillTouchEnd}
+        onClick={() => setIsDrawerOpen(true)}
+        className="flex items-center justify-between bg-[#fffaf3] border border-[#8a614828] rounded-2xl p-2.5 sm:p-3.5 shadow-2xs hover:border-clay/60 cursor-pointer transition select-none group"
+      >
+        <div className="flex items-center gap-2 sm:gap-3">
+          <span className="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl bg-[#8a614815] text-base shrink-0">
+            {selectedCategory === "All" ? "✨" : getCategoryIcon(selectedCategory)}
           </span>
-          <span className="text-[9px] text-[#dfb15b] font-mono font-semibold mt-0.5">
-            Swipe ›
+          <div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs sm:text-sm font-bold text-ink">
+                {selectedCategory === "All" ? "All Handcrafted Candles" : selectedCategory}
+              </span>
+              <span className="text-[10px] sm:text-[11px] font-mono font-bold text-[#765442] bg-[#8a614815] px-2 py-0.2 rounded-full">
+                {filteredProducts.length} {filteredProducts.length === 1 ? "item" : "items"}
+              </span>
+            </div>
+            <p className="text-[10px] text-[#765442] font-medium mt-0.5 hidden xs:block">
+              Swipe right ❯ or tap to view all collections
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {selectedCategory !== "All" && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedCategory("All");
+              }}
+              className="text-xs text-clay hover:text-ink font-semibold underline cursor-pointer px-1 py-1"
+            >
+              Reset
+            </button>
+          )}
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-ink group-hover:bg-clay text-cream px-3 py-1.5 text-xs font-bold transition shadow-2xs">
+            <span>Collections</span>
+            <span className="text-[#dfb15b] font-bold">›</span>
           </span>
         </div>
       </div>
 
       {/* ==================================================== */}
-      {/* 2. GENTLE SLIDE-IN COLLECTION DRAWER / COLUMNS       */}
+      {/* 3. GENTLE SLIDE-IN COLLECTION DRAWER / COLUMNS       */}
       {/* ==================================================== */}
       {/* Backdrop overlay */}
       {isDrawerOpen && (
@@ -349,42 +402,6 @@ export function ProductCollection({
             className="font-bold underline hover:text-ink cursor-pointer"
           >
             Close
-          </button>
-        </div>
-      </div>
-
-      {/* ==================================================== */}
-      {/* 3. CLEAN COLLECTION STATUS & DRAWER TRIGGER          */}
-      {/* ==================================================== */}
-      <div className="flex items-center justify-between border-b border-[#5c392715] pb-3">
-        <div className="flex items-center gap-2">
-          <span className="text-xs sm:text-sm font-bold text-ink">
-            {selectedCategory === "All" ? "All Candles" : selectedCategory}
-          </span>
-          <span className="text-[11px] font-mono text-[#765442] bg-[#8a614815] px-2 py-0.5 rounded-full font-semibold">
-            {filteredProducts.length}
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          {selectedCategory !== "All" && (
-            <button
-              type="button"
-              onClick={() => setSelectedCategory("All")}
-              className="text-xs text-clay hover:text-ink font-semibold underline cursor-pointer active:scale-95"
-            >
-              Show all
-            </button>
-          )}
-
-          <button
-            type="button"
-            onClick={() => setIsDrawerOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-full bg-white border border-[#8a614830] px-3 py-1.5 text-xs font-bold text-ink hover:bg-[#8a614815] transition active:scale-95 shadow-2xs cursor-pointer"
-          >
-            <span>☰</span>
-            <span>Collections</span>
-            <span className="text-clay font-bold">›</span>
           </button>
         </div>
       </div>
