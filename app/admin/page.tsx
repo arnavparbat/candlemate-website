@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { Order, OrderStatus, Product } from "@/lib/types";
 import { supabase, getSupabase, isSupabaseConfigured } from "@/lib/supabase";
 import Link from "next/link";
@@ -50,18 +50,82 @@ function fileToOptimizedDataUrl(file: File, maxDim = 1200, quality = 0.85): Prom
 }
 
 export default function Admin() {
+  // Navigation tabs: 'orders' | 'products' | 'settings'
+  const [activeTab, setActiveTab] = useState<"orders" | "products" | "settings">("orders");
+
+  // Main Data States
   const [orders, setOrders] = useState<Order[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const [filter, setFilter] = useState("All");
   const [upi, setUpi] = useState("");
   const [notice, setNotice] = useState("");
-  const [selectedScreenshotOrder, setSelectedScreenshotOrder] = useState<Order | null>(null);
-  const [uploadedPhotos, setUploadedPhotos] = useState<string[]>([]);
-  const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
+  const [isLoadingData, setIsLoadingData] = useState(false);
+
+  // Audio & Notification States
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [notificationsGranted, setNotificationsGranted] = useState(false);
   const [isLiveConnected, setIsLiveConnected] = useState(false);
   const [newOrderAlert, setNewOrderAlert] = useState<Order | null>(null);
+  const [highlightedOrderId, setHighlightedOrderId] = useState<string | null>(null);
 
-  // Product Edit State
+  // Orders Filter, Search & Pagination States
+  const [orderFilter, setOrderFilter] = useState("All");
+  const [orderSearchQuery, setOrderSearchQuery] = useState("");
+  const [orderSortBy, setOrderSortBy] = useState<"newest" | "oldest" | "highest">("newest");
+  const [ordersPerPage, setOrdersPerPage] = useState<number>(10);
+  const [currentOrderPage, setCurrentOrderPage] = useState<number>(1);
+  const [expandedOrderIds, setExpandedOrderIds] = useState<Record<string, boolean>>({});
+  const [orderViewMode, setOrderViewMode] = useState<"cards" | "table">("cards");
+
+  // Screenshot Viewer Modal State
+  const [selectedScreenshotOrder, setSelectedScreenshotOrder] = useState<Order | null>(null);
+
+  // Add Product Modal & Form State
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [uploadedPhotos, setUploadedPhotos] = useState<string[]>([]);
+  const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
+  const [isSubmittingProduct, setIsSubmittingProduct] = useState(false);
+  const [draft, setDraft] = useState<{
+    name: string;
+    price: string | number;
+    category: string;
+    images: string;
+    available: boolean;
+    wickSize: string;
+    candleDimensions: string;
+    fragrance: string;
+    burnTime: string;
+    ingredients: string;
+    description: string;
+  }>({
+    name: "",
+    price: "",
+    category: "Jar candle",
+    images: "",
+    available: true,
+    wickSize: "",
+    candleDimensions: "",
+    fragrance: "",
+    burnTime: "",
+    ingredients: "",
+    description: "",
+  });
+  const [draftSpecsEnabled, setDraftSpecsEnabled] = useState<{
+    wickSize: boolean;
+    candleDimensions: boolean;
+    fragrance: boolean;
+    burnTime: boolean;
+    ingredients: boolean;
+    description: boolean;
+  }>({
+    wickSize: false,
+    candleDimensions: false,
+    fragrance: false,
+    burnTime: false,
+    ingredients: false,
+    description: false,
+  });
+
+  // Product Edit Modal State
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [editForm, setEditForm] = useState<{
     name: string;
@@ -107,28 +171,93 @@ export default function Admin() {
   const [editNewImageUrl, setEditNewImageUrl] = useState("");
   const [isProcessingEditPhoto, setIsProcessingEditPhoto] = useState(false);
 
+  // Products Filter & Search State
+  const [productSearchQuery, setProductSearchQuery] = useState("");
+  const [productCategoryFilter, setProductCategoryFilter] = useState("All");
+
+  const orderCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  // ----------------------------------------------------
+  // Audio & Push Notification Helper
+  // ----------------------------------------------------
   function playOrderChime() {
+    if (!soundEnabled) return;
     try {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       if (!AudioCtx) return;
       const ctx = new AudioCtx();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type = "sine";
-      const now = ctx.currentTime;
-      osc.frequency.setValueAtTime(587.33, now); // D5
-      osc.frequency.setValueAtTime(880, now + 0.14); // A5
-      gain.gain.setValueAtTime(0.25, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.65);
-      osc.start(now);
-      osc.stop(now + 0.65);
+      if (ctx.state === "suspended") {
+        ctx.resume();
+      }
+      // Rich, warm 4-note chime sequence: C5 (523.25Hz), E5 (659.25Hz), G5 (783.99Hz), C6 (1046.5Hz)
+      const notes = [523.25, 659.25, 783.99, 1046.5];
+      notes.forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = "sine";
+        const start = ctx.currentTime + idx * 0.12;
+        osc.frequency.setValueAtTime(freq, start);
+        gain.gain.setValueAtTime(0.2, start);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.38);
+        osc.start(start);
+        osc.stop(start + 0.38);
+      });
     } catch {
       // Audio autoplay policy fallback
     }
+
+    // Haptic vibration on mobile phones
+    if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+      try {
+        navigator.vibrate([250, 100, 250, 100, 400]);
+      } catch {}
+    }
   }
 
+  function triggerBrowserNotification(order: Order) {
+    if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+      try {
+        new Notification("🕯️ Candlemate: New Order Received!", {
+          body: `Order #${order.id} for ₹${order.total} from ${order.customer.name}`,
+          icon: "/logo.png",
+        });
+      } catch {}
+    }
+  }
+
+  async function requestNotificationPermission() {
+    if (typeof window !== "undefined" && "Notification" in window) {
+      try {
+        const res = await Notification.requestPermission();
+        if (res === "granted") {
+          setNotificationsGranted(true);
+          setNotice("✓ Browser alerts enabled! You will be notified when customers place orders.");
+          new Notification("🕯️ Candlemate Studio Alerts", {
+            body: "Order notifications are now enabled for this browser!",
+            icon: "/logo.png",
+          });
+        } else {
+          setNotice("Notification permission was denied in browser settings.");
+        }
+      } catch {
+        setNotice("Unable to request notification permissions.");
+      }
+    } else {
+      setNotice("Web Notifications are not supported on this browser.");
+    }
+  }
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && "Notification" in window) {
+      setNotificationsGranted(Notification.permission === "granted");
+    }
+  }, []);
+
+  // ----------------------------------------------------
+  // Screenshot Expiry Calculator
+  // ----------------------------------------------------
   function getScreenshotExpiryInfo(createdAt: string, expiresAt?: string) {
     const createdTime = new Date(createdAt).getTime();
     const expiryTime = expiresAt
@@ -224,147 +353,152 @@ export default function Admin() {
       setNotice("Failed to delete screenshot.");
     }
   }
-  const [draft, setDraft] = useState<{
-    name: string;
-    price: string | number;
-    category: string;
-    images: string;
-    available: boolean;
-    wickSize: string;
-    candleDimensions: string;
-    fragrance: string;
-    burnTime: string;
-    ingredients: string;
-    description: string;
-  }>({
-    name: "",
-    price: "",
-    category: "Jar candle",
-    images: "",
-    available: true,
-    wickSize: "",
-    candleDimensions: "",
-    fragrance: "",
-    burnTime: "",
-    ingredients: "",
-    description: "",
-  });
 
-  const [draftSpecsEnabled, setDraftSpecsEnabled] = useState<{
-    wickSize: boolean;
-    candleDimensions: boolean;
-    fragrance: boolean;
-    burnTime: boolean;
-    ingredients: boolean;
-    description: boolean;
-  }>({
-    wickSize: false,
-    candleDimensions: false,
-    fragrance: false,
-    burnTime: false,
-    ingredients: false,
-    description: false,
-  });
+  // ----------------------------------------------------
+  // Relative Time & Utility Helpers
+  // ----------------------------------------------------
+  function formatRelativeTime(dateString: string) {
+    try {
+      const d = new Date(dateString);
+      const diffMs = Date.now() - d.getTime();
+      const mins = Math.floor(diffMs / 60000);
+      if (mins < 1) return "Just now";
+      if (mins < 60) return `${mins}m ago`;
+      const hours = Math.floor(mins / 60);
+      if (hours < 24) return `${hours}h ago`;
+      const days = Math.floor(hours / 24);
+      if (days === 1) return "Yesterday";
+      if (days < 7) return `${days}d ago`;
+      return d.toLocaleDateString("en-IN", { month: "short", day: "numeric" });
+    } catch {
+      return dateString;
+    }
+  }
 
+  function copyToClipboard(text: string, label = "Address") {
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+      setNotice(`✓ Copied ${label} to clipboard!`);
+      setTimeout(() => setNotice(""), 3000);
+    }
+  }
+
+  function getWhatsAppUrl(order: Order) {
+    const cleanPhone = order.customer.phone.replace(/[^0-9]/g, "");
+    const phoneWithCountry = cleanPhone.startsWith("91") ? cleanPhone : `91${cleanPhone}`;
+    const msg = `Hi ${order.customer.name}! Candlemate studio here regarding your order #${order.id} (₹${order.total}). We are handcrafting your candles with natural soy wax. 🕯️✨`;
+    return `https://wa.me/${phoneWithCountry}?text=${encodeURIComponent(msg)}`;
+  }
+
+  // ----------------------------------------------------
+  // Data Fetching & Sync
+  // ----------------------------------------------------
   async function load() {
+    setIsLoadingData(true);
     let o: Order[] = [];
-    if (isSupabaseConfigured()) {
-      const { data, error } = await supabase
-        .from("orders")
-        .select("*")
-        .neq("id", "__SYSTEM_STORE_PRODUCTS__")
-        .neq("status", "SYSTEM_INTERNAL")
-        .order("created_at", { ascending: false });
+    try {
+      if (isSupabaseConfigured()) {
+        const { data, error } = await supabase
+          .from("orders")
+          .select("*")
+          .neq("id", "__SYSTEM_STORE_PRODUCTS__")
+          .neq("status", "SYSTEM_INTERNAL")
+          .order("created_at", { ascending: false });
 
-      if (!error && data) {
-        o = data.map((row: any): Order => {
-          const isCashfree = row.payment_method === "Cashfree Gateway" || row.screenshot?.startsWith("CASHFREE_");
-          const isPaid =
-            row.status === "Order Received" &&
-            (row.payment_status === "SUCCESS" || row.screenshot?.startsWith("CASHFREE_AUTO_VERIFIED"));
-          const cfPaymentId = row.screenshot?.startsWith("CASHFREE_AUTO_VERIFIED:")
-            ? row.screenshot.split(":")[1]
-            : undefined;
+        if (!error && data) {
+          o = data.map((row: any): Order => {
+            const isCashfree = row.payment_method === "Cashfree Gateway" || row.screenshot?.startsWith("CASHFREE_");
+            const isPaid =
+              row.status === "Order Received" &&
+              (row.payment_status === "SUCCESS" || row.screenshot?.startsWith("CASHFREE_AUTO_VERIFIED"));
+            const cfPaymentId = row.screenshot?.startsWith("CASHFREE_AUTO_VERIFIED:")
+              ? row.screenshot.split(":")[1]
+              : undefined;
 
-          return {
-            id: row.id,
-            customer: {
-              name: row.customer_name,
-              phone: row.customer_phone,
-              address: row.customer_address,
-            },
-            items: row.items || [],
-            total: Number(row.total),
-            status: row.status,
-            screenshot: row.screenshot,
-            screenshotExpired: !row.screenshot && Boolean(row.screenshot_expired),
-            screenshotExpiresAt: row.screenshot_expires_at,
-            createdAt: row.created_at,
-            paymentMethod: isCashfree ? "Cashfree Gateway" : undefined,
-            paymentStatus: isPaid ? "SUCCESS" : row.status === "Payment Pending" ? "PENDING" : undefined,
-            cashfreePaymentId: cfPaymentId,
-            transactionId: cfPaymentId,
-          };
-        });
+            return {
+              id: row.id,
+              customer: {
+                name: row.customer_name,
+                phone: row.customer_phone,
+                address: row.customer_address,
+              },
+              items: row.items || [],
+              total: Number(row.total),
+              status: row.status,
+              screenshot: row.screenshot,
+              screenshotExpired: !row.screenshot && Boolean(row.screenshot_expired),
+              screenshotExpiresAt: row.screenshot_expires_at,
+              createdAt: row.created_at,
+              paymentMethod: isCashfree ? "Cashfree Gateway" : undefined,
+              paymentStatus: isPaid ? "SUCCESS" : row.status === "Payment Pending" ? "PENDING" : undefined,
+              cashfreePaymentId: cfPaymentId,
+              transactionId: cfPaymentId,
+            };
+          });
+        } else {
+          o = await fetch("/api/admin/orders").then((r) => r.json());
+        }
       } else {
         o = await fetch("/api/admin/orders").then((r) => r.json());
       }
-    } else {
-      o = await fetch("/api/admin/orders").then((r) => r.json());
-    }
 
-    const [p, s] = await Promise.all([
-      fetch("/api/products").then((r) => r.json()),
-      fetch("/api/settings/payment").then((r) => r.json()),
-    ]);
-    setOrders(o);
-    setProducts(p);
-    setUpi(s.upiId);
+      const [p, s] = await Promise.all([
+        fetch("/api/products").then((r) => r.json()),
+        fetch("/api/settings/payment").then((r) => r.json()),
+      ]);
+      setOrders(Array.isArray(o) ? o : []);
+      setProducts(Array.isArray(p) ? p : []);
+      setUpi(s.upiId || "");
 
-    // Background auto-reconciliation: Automatically re-check any pending Cashfree orders
-    if (Array.isArray(o)) {
-      const pendingCfOrders = o.filter(
-        (order) =>
-          (order.status === "Payment Pending" || order.paymentStatus === "PENDING") &&
-          (order.paymentMethod === "Cashfree Gateway" || order.screenshot?.startsWith("CASHFREE_"))
-      );
-      if (pendingCfOrders.length > 0) {
-        pendingCfOrders.forEach((pendingOrder) => {
-          fetch(`/api/payment/cashfree/verify?orderId=${encodeURIComponent(pendingOrder.id)}`)
-            .then((r) => r.json())
-            .then((res) => {
-              if (res.verified) {
-                setOrders((prev) =>
-                  prev.map((ord) =>
-                    ord.id === pendingOrder.id
-                      ? {
-                          ...ord,
-                          status: "Order Received",
-                          paymentStatus: "SUCCESS",
-                          screenshot: `CASHFREE_AUTO_VERIFIED:${res.paymentId || "PAID"}`,
-                          transactionId: res.paymentId || "PAID",
-                          cashfreePaymentId: res.paymentId || "PAID",
-                        }
-                      : ord
-                  )
-                );
-              }
-            })
-            .catch(() => {});
-        });
+      // Background auto-reconciliation: Automatically re-check any pending Cashfree orders
+      if (Array.isArray(o)) {
+        const pendingCfOrders = o.filter(
+          (order) =>
+            (order.status === "Payment Pending" || order.paymentStatus === "PENDING") &&
+            (order.paymentMethod === "Cashfree Gateway" || order.screenshot?.startsWith("CASHFREE_"))
+        );
+        if (pendingCfOrders.length > 0) {
+          pendingCfOrders.forEach((pendingOrder) => {
+            fetch(`/api/payment/cashfree/verify?orderId=${encodeURIComponent(pendingOrder.id)}`)
+              .then((r) => r.json())
+              .then((res) => {
+                if (res.verified) {
+                  setOrders((prev) =>
+                    prev.map((ord) =>
+                      ord.id === pendingOrder.id
+                        ? {
+                            ...ord,
+                            status: "Order Received",
+                            paymentStatus: "SUCCESS",
+                            screenshot: `CASHFREE_AUTO_VERIFIED:${res.paymentId || "PAID"}`,
+                            transactionId: res.paymentId || "PAID",
+                            cashfreePaymentId: res.paymentId || "PAID",
+                          }
+                        : ord
+                    )
+                  );
+                }
+              })
+              .catch(() => {});
+          });
+        }
       }
+    } catch {
+      setNotice("Could not load latest studio data. Retrying...");
+    } finally {
+      setIsLoadingData(false);
     }
   }
 
   useEffect(() => {
     load();
 
-    // 1. Supabase Realtime WebSockets: Instant <50ms push with ZERO serverless timeouts
+    // 1. Supabase Realtime WebSockets
     let supabaseChannel: any = null;
     if (isSupabaseConfigured()) {
-      const supabase = getSupabase();
-      if (supabase) {
-        supabaseChannel = supabase
+      const sb = getSupabase();
+      if (sb) {
+        supabaseChannel = sb
           .channel("studio-orders-realtime")
           .on(
             "postgres_changes",
@@ -394,6 +528,7 @@ export default function Admin() {
               });
               setNewOrderAlert(newOrder);
               playOrderChime();
+              triggerBrowserNotification(newOrder);
             }
           )
           .on(
@@ -424,7 +559,7 @@ export default function Admin() {
       }
     }
 
-    // 2. Server-Sent Events (SSE) stream fallback (for dedicated order server or local dev)
+    // 2. Server-Sent Events (SSE) fallback
     let eventSource: EventSource | null = null;
     try {
       eventSource = new EventSource("/api/orders/live");
@@ -441,6 +576,7 @@ export default function Admin() {
             });
             setNewOrderAlert(data.order);
             playOrderChime();
+            triggerBrowserNotification(data.order);
           } else if (data.type === "STATUS_UPDATED") {
             setOrders((prev) =>
               prev.map((o) => (o.id === data.id ? { ...o, status: data.status } : o))
@@ -467,7 +603,7 @@ export default function Admin() {
       }
     }
 
-    // 3. Heartbeat polling every 10 seconds to ensure no order is ever missed under any network condition
+    // 3. Heartbeat polling every 10 seconds
     const pollInterval = setInterval(() => {
       fetch("/api/admin/orders")
         .then((r) => r.json())
@@ -479,6 +615,7 @@ export default function Admin() {
                 if (!prev.some((o) => o.id === newest.id)) {
                   playOrderChime();
                   setNewOrderAlert(newest);
+                  triggerBrowserNotification(newest);
                 }
               }
               return freshOrders;
@@ -490,16 +627,18 @@ export default function Admin() {
 
     return () => {
       if (supabaseChannel) {
-        const supabase = getSupabase();
-        supabase?.removeChannel(supabaseChannel);
+        const sb = getSupabase();
+        sb?.removeChannel(supabaseChannel);
       }
       if (eventSource) eventSource.close();
       clearInterval(pollInterval);
     };
-  }, []);
+  }, [soundEnabled]);
 
+  // ----------------------------------------------------
+  // Order Actions
+  // ----------------------------------------------------
   async function status(id: string, newStatus: OrderStatus) {
-    // Optimistic UI update so studio admin sees immediate change
     setOrders((prev) =>
       prev.map((o) => (o.id === id ? { ...o, status: newStatus } : o))
     );
@@ -511,7 +650,7 @@ export default function Admin() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: newStatus }),
     });
-    setNotice(`Updated order ${id} to "${newStatus}"`);
+    setNotice(`Updated order ${id} status to "${newStatus}"`);
     load();
   }
 
@@ -532,11 +671,131 @@ export default function Admin() {
     }
   }
 
+  function toggleOrderExpand(id: string) {
+    setExpandedOrderIds((prev) => ({
+      ...prev,
+      [id]: !prev[id],
+    }));
+  }
+
+  function expandAllOrders() {
+    const allExpanded: Record<string, boolean> = {};
+    filteredOrders.forEach((o) => {
+      allExpanded[o.id] = true;
+    });
+    setExpandedOrderIds(allExpanded);
+  }
+
+  function collapseAllOrders() {
+    setExpandedOrderIds({});
+  }
+
+  function viewNewOrderDetails(order: Order) {
+    setActiveTab("orders");
+    setOrderFilter("All");
+    setOrderSearchQuery("");
+    setCurrentOrderPage(1);
+    setExpandedOrderIds((prev) => ({ ...prev, [order.id]: true }));
+    setHighlightedOrderId(order.id);
+    setNewOrderAlert(null);
+
+    // Smooth scroll to card
+    setTimeout(() => {
+      const el = orderCardRefs.current[order.id];
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }, 150);
+
+    setTimeout(() => {
+      setHighlightedOrderId(null);
+    }, 5000);
+  }
+
+  // ----------------------------------------------------
+  // Filtered & Paginated Orders
+  // ----------------------------------------------------
+  const filteredOrders = useMemo(() => {
+    return orders
+      .filter((o) => {
+        if (orderFilter !== "All" && o.status !== orderFilter) return false;
+        if (!orderSearchQuery.trim()) return true;
+        const q = orderSearchQuery.toLowerCase();
+        return (
+          o.id.toLowerCase().includes(q) ||
+          o.customer.name.toLowerCase().includes(q) ||
+          o.customer.phone.toLowerCase().includes(q) ||
+          (o.customer.address && o.customer.address.toLowerCase().includes(q))
+        );
+      })
+      .sort((a, b) => {
+        if (orderSortBy === "newest") {
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        } else if (orderSortBy === "oldest") {
+          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        } else {
+          return b.total - a.total;
+        }
+      });
+  }, [orders, orderFilter, orderSearchQuery, orderSortBy]);
+
+  const totalOrderPages = useMemo(() => {
+    if (ordersPerPage === 0) return 1;
+    return Math.max(1, Math.ceil(filteredOrders.length / ordersPerPage));
+  }, [filteredOrders.length, ordersPerPage]);
+
+  const paginatedOrders = useMemo(() => {
+    if (ordersPerPage === 0) return filteredOrders;
+    const start = (currentOrderPage - 1) * ordersPerPage;
+    return filteredOrders.slice(start, start + ordersPerPage);
+  }, [filteredOrders, currentOrderPage, ordersPerPage]);
+
+  // Order Counts by Status
+  const orderCounts = useMemo(() => {
+    const counts: Record<string, number> = {
+      All: orders.length,
+      "Payment Pending": 0,
+      "Order Received": 0,
+      Preparing: 0,
+      "Out for Delivery": 0,
+      Delivered: 0,
+      "Payment Failed": 0,
+    };
+    orders.forEach((o) => {
+      if (counts[o.status] !== undefined) {
+        counts[o.status] += 1;
+      }
+    });
+    return counts;
+  }, [orders]);
+
+  // Quick Business Stats
+  const stats = useMemo(() => {
+    const totalRev = orders.reduce((sum, o) => {
+      if (o.status !== "Payment Failed") return sum + (o.total || 0);
+      return sum;
+    }, 0);
+    const pendingActionCount = orders.filter(
+      (o) => o.status === "Order Received" || o.status === "Payment Pending"
+    ).length;
+    const activeProductsCount = products.filter((p) => p.available !== false).length;
+    return {
+      totalOrders: orders.length,
+      totalRevenue: totalRev,
+      pendingAction: pendingActionCount,
+      activeProducts: activeProductsCount,
+      totalProducts: products.length,
+    };
+  }, [orders, products]);
+
+  // ----------------------------------------------------
+  // Add Product Flow
+  // ----------------------------------------------------
   async function handleDraftFiles(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
     setIsProcessingPhoto(true);
-    setNotice("Processing photos from your device...");
+    setNotice("Optimizing photo(s)...");
     try {
       const urls: string[] = [];
       for (const file of files) {
@@ -544,7 +803,7 @@ export default function Admin() {
         urls.push(optimized);
       }
       setUploadedPhotos((prev) => [...prev, ...urls]);
-      setNotice(`Added ${urls.length} photo(s) from device.`);
+      setNotice(`✓ Added ${urls.length} photo(s) from device.`);
     } catch {
       setNotice("Failed to process one or more photos.");
     } finally {
@@ -608,50 +867,66 @@ export default function Admin() {
       return;
     }
 
-    await fetch("/api/products", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: draft.name.trim(),
-        price: numPrice,
-        category: draft.category || "Jar candle",
-        available: draft.available !== false,
-        images: finalImages,
-        wickSize: draftSpecsEnabled.wickSize ? draft.wickSize.trim() : "",
-        candleDimensions: draftSpecsEnabled.candleDimensions ? draft.candleDimensions.trim() : "",
-        fragrance: draftSpecsEnabled.fragrance ? draft.fragrance.trim() : "",
-        burnTime: draftSpecsEnabled.burnTime ? draft.burnTime.trim() : "",
-        ingredients: draftSpecsEnabled.ingredients ? draft.ingredients.trim() : "",
-        description: draftSpecsEnabled.description ? draft.description.trim() : "",
-      }),
-    });
+    setIsSubmittingProduct(true);
+    try {
+      const res = await fetch("/api/products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: draft.name.trim(),
+          price: numPrice,
+          category: draft.category || "Jar candle",
+          available: draft.available !== false,
+          images: finalImages,
+          wickSize: draftSpecsEnabled.wickSize ? draft.wickSize.trim() : "",
+          candleDimensions: draftSpecsEnabled.candleDimensions ? draft.candleDimensions.trim() : "",
+          fragrance: draftSpecsEnabled.fragrance ? draft.fragrance.trim() : "",
+          burnTime: draftSpecsEnabled.burnTime ? draft.burnTime.trim() : "",
+          ingredients: draftSpecsEnabled.ingredients ? draft.ingredients.trim() : "",
+          description: draftSpecsEnabled.description ? draft.description.trim() : "",
+        }),
+      });
 
-    setDraft({
-      name: "",
-      price: "",
-      category: "Jar candle",
-      images: "",
-      available: true,
-      wickSize: "",
-      candleDimensions: "",
-      fragrance: "",
-      burnTime: "",
-      ingredients: "",
-      description: "",
-    });
-    setDraftSpecsEnabled({
-      wickSize: false,
-      candleDimensions: false,
-      fragrance: false,
-      burnTime: false,
-      ingredients: false,
-      description: false,
-    });
-    setUploadedPhotos([]);
-    setNotice("Product added to the collection.");
-    load();
+      if (!res.ok) {
+        throw new Error("Failed to add product");
+      }
+
+      setDraft({
+        name: "",
+        price: "",
+        category: "Jar candle",
+        images: "",
+        available: true,
+        wickSize: "",
+        candleDimensions: "",
+        fragrance: "",
+        burnTime: "",
+        ingredients: "",
+        description: "",
+      });
+      setDraftSpecsEnabled({
+        wickSize: false,
+        candleDimensions: false,
+        fragrance: false,
+        burnTime: false,
+        ingredients: false,
+        description: false,
+      });
+      setUploadedPhotos([]);
+      setIsAddModalOpen(false);
+      setNotice(`✓ "${draft.name.trim()}" added to your candle collection!`);
+      setActiveTab("products");
+      load();
+    } catch (err: any) {
+      setNotice(`Error adding candle: ${err.message}`);
+    } finally {
+      setIsSubmittingProduct(false);
+    }
   }
 
+  // ----------------------------------------------------
+  // Edit Product Flow
+  // ----------------------------------------------------
   function startEditingProduct(p: Product) {
     setEditingProduct(p);
     const hasWick = Boolean(p.wickSize && p.wickSize.trim());
@@ -768,7 +1043,6 @@ export default function Admin() {
       return;
     }
 
-    // Strict validation for ticked specifications: if ticked, MUST be filled!
     if (editSpecsEnabled.wickSize && !editForm.wickSize.trim()) {
       setNotice("Please fill in Wick Size or untick the checkbox to exclude it.");
       return;
@@ -795,8 +1069,6 @@ export default function Admin() {
     }
 
     setIsSavingProduct(true);
-    setNotice(`Saving changes for "${editForm.name}"...`);
-
     try {
       const payload: Product = {
         id: editingProduct.id,
@@ -824,15 +1096,13 @@ export default function Admin() {
       }
 
       const updated = await res.json();
-
-      // Immediately update local admin state so UI reflects edits instantly
       setProducts((prev) =>
         prev.map((item) => (item.id === editingProduct.id ? updated : item))
       );
 
-      setNotice(`✓ "${updated.name}" updated! Changes are now live on the customer store.`);
+      setNotice(`✓ "${updated.name}" updated! Live on customer store.`);
       setEditingProduct(null);
-      load(); // re-verify in background
+      load();
     } catch (err: any) {
       setNotice(`Failed to save changes: ${err.message}`);
     } finally {
@@ -866,35 +1136,16 @@ export default function Admin() {
     }
   }
 
-  async function handleProductAddImage(p: Product, file: File) {
-    setNotice(`Adding photo to ${p.name}...`);
-    try {
-      const dataUrl = await fileToOptimizedDataUrl(file);
-      const newImages = [...(p.images || []), dataUrl];
-      await updateProduct(p, { images: newImages });
-      setNotice(`New photo added to ${p.name}.`);
-    } catch {
-      setNotice("Failed to add photo.");
-    }
-  }
-
-  async function removeProductImage(p: Product, index: number) {
-    if ((p.images || []).length <= 1) {
-      setNotice("Product must have at least one photo.");
-      return;
-    }
-    const newImages = p.images.filter((_, i) => i !== index);
-    await updateProduct(p, { images: newImages });
-    setNotice(`Photo removed from ${p.name}.`);
-  }
-
   async function remove(id: string) {
-    if (confirm("Remove this product from the collection?")) {
+    if (confirm("Remove this candle from your collection?")) {
       await fetch(`/api/products/${encodeURIComponent(id)}`, { method: "DELETE" });
       load();
     }
   }
 
+  // ----------------------------------------------------
+  // Settings Actions
+  // ----------------------------------------------------
   async function payment(e: React.FormEvent) {
     e.preventDefault();
     const r = await fetch("/api/admin/settings/payment", {
@@ -902,7 +1153,7 @@ export default function Admin() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ upiId: upi }),
     });
-    setNotice(r.ok ? "Payment details saved." : "Please use a valid UPI ID.");
+    setNotice(r.ok ? "✓ Payment UPI destination saved." : "Please use a valid UPI ID.");
   }
 
   async function password(e: React.FormEvent<HTMLFormElement>) {
@@ -916,698 +1167,1256 @@ export default function Admin() {
         newPassword: data.get("newPassword"),
       }),
     });
-    setNotice(r.ok ? "Password updated." : "Couldn’t update password.");
+    setNotice(r.ok ? "✓ Studio password updated successfully." : "Couldn’t update password.");
     if (r.ok) e.currentTarget.reset();
   }
 
-  const shown = filter === "All" ? orders : orders.filter((o) => o.status === filter);
+  // ----------------------------------------------------
+  // Filtered Products
+  // ----------------------------------------------------
+  const filteredProducts = useMemo(() => {
+    return products.filter((p) => {
+      if (productCategoryFilter !== "All" && p.category !== productCategoryFilter) return false;
+      if (!productSearchQuery.trim()) return true;
+      const q = productSearchQuery.toLowerCase();
+      return (
+        p.name.toLowerCase().includes(q) ||
+        (p.description && p.description.toLowerCase().includes(q)) ||
+        (p.fragrance && p.fragrance.toLowerCase().includes(q))
+      );
+    });
+  }, [products, productCategoryFilter, productSearchQuery]);
+
+  const productCategories = useMemo(() => {
+    const cats = new Set<string>();
+    products.forEach((p) => {
+      if (p.category) cats.add(p.category);
+    });
+    return ["All", ...Array.from(cats)];
+  }, [products]);
 
   return (
-    <main className="min-h-screen bg-[#f8f0e3]">
-      <header className="border-b bg-[#fff8ed] sticky top-0 z-30 shadow-xs">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-3.5 sm:px-5 py-3 sm:py-4">
-          <Link href="/" className="flex items-center gap-2 group">
-            <img
-              src="/logo.png"
-              alt="Candlemate"
-              className="h-7 w-auto object-contain sm:hidden"
-            />
-            <img
-              src="/logo-wordmark.png"
-              alt="Candlemate"
-              className="h-5 sm:h-7 w-auto object-contain"
-            />
-          </Link>
-          <div className="flex items-center gap-1.5 sm:gap-3">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 sm:px-3 py-1 text-[11px] sm:text-xs font-semibold text-emerald-800 border border-emerald-200 shadow-xs">
-              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="hidden sm:inline">{isLiveConnected ? "Studio Live Stream Connected" : "Studio Auto-Sync Active"}</span>
-              <span className="sm:hidden">{isLiveConnected ? "Live" : "Synced"}</span>
-            </span>
-            <span className="rounded-full bg-[#e9d5b8] px-2.5 sm:px-3 py-1 text-[11px] sm:text-xs font-medium text-[#765442]">
-              <span className="hidden sm:inline">Studio dashboard</span>
-              <span className="sm:hidden">Studio</span>
-            </span>
+    <main className="min-h-screen bg-[#f8f0e3] text-ink pb-24 md:pb-12">
+      {/* ==================================================== */}
+      {/* 1. TOP HEADER & STUDIO CONTROLS                      */}
+      {/* ==================================================== */}
+      <header className="sticky top-0 z-40 bg-[#fff8ed]/95 backdrop-blur-md border-b border-[#8a614820] shadow-2xs">
+        <div className="mx-auto max-w-7xl px-3 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between gap-2">
+          {/* Logo & Brand */}
+          <div className="flex items-center gap-2 sm:gap-3">
+            <Link href="/" className="flex items-center gap-1.5 group active:scale-95 transition">
+              <img
+                src="/logo.png"
+                alt="Candlemate"
+                className="h-7 w-auto object-contain candle-glow drop-shadow-xs"
+              />
+              <img
+                src="/logo-wordmark.png"
+                alt="Candlemate"
+                className="h-5 sm:h-6 w-auto object-contain"
+              />
+            </Link>
+
+            {/* Live Sync Status Pill */}
+            <div
+              onClick={() => load()}
+              title="Click to manually refresh orders & studio data"
+              className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200 px-2 sm:px-2.5 py-0.5 text-[11px] font-semibold text-emerald-800 shadow-2xs cursor-pointer hover:bg-emerald-100 transition active:scale-95 select-none"
+            >
+              <span className={`h-2 w-2 rounded-full ${isLoadingData ? "bg-amber-500 animate-spin" : "bg-emerald-500 animate-pulse"}`} />
+              <span className="hidden sm:inline">{isLoadingData ? "Syncing..." : isLiveConnected ? "Studio Live Stream" : "Studio Auto-Sync"}</span>
+              <span className="sm:hidden">{isLoadingData ? "Syncing" : "Live"}</span>
+              <span className="text-[10px] text-emerald-600 font-mono opacity-80">↻</span>
+            </div>
           </div>
+
+          {/* Quick Action Buttons */}
+          <div className="flex items-center gap-1.5 sm:gap-2.5">
+            {/* Audio & Alert Control */}
+            <button
+              type="button"
+              onClick={() => {
+                setSoundEnabled(!soundEnabled);
+                if (!soundEnabled) playOrderChime();
+              }}
+              className={`flex items-center gap-1 rounded-xl px-2.5 py-1.5 text-xs font-semibold border transition active:scale-95 shadow-2xs cursor-pointer ${
+                soundEnabled
+                  ? "bg-amber-50 border-amber-300 text-amber-900 hover:bg-amber-100"
+                  : "bg-stone-100 border-stone-300 text-stone-500"
+              }`}
+              title={soundEnabled ? "Sound chime alerts are ON (Click to mute)" : "Sound chime is MUTED (Click to enable)"}
+            >
+              <span>{soundEnabled ? "🔔" : "🔕"}</span>
+              <span className="hidden md:inline">{soundEnabled ? "Chime On" : "Muted"}</span>
+            </button>
+
+            {/* Push Notifications Toggle */}
+            {!notificationsGranted && (
+              <button
+                type="button"
+                onClick={requestNotificationPermission}
+                className="hidden sm:inline-flex items-center gap-1 rounded-xl bg-white border border-[#8a614830] px-2.5 py-1.5 text-xs font-semibold text-[#765442] hover:text-ink hover:bg-stone-50 transition active:scale-95 shadow-2xs cursor-pointer"
+                title="Enable browser notifications when phone is locked"
+              >
+                <span>📲</span>
+                <span>Enable Alerts</span>
+              </button>
+            )}
+
+            {/* Prominent Quick "+ Add Candle" Button */}
+            <button
+              type="button"
+              onClick={() => setIsAddModalOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-full bg-ink hover:bg-clay text-white px-3.5 sm:px-4 py-1.5 text-xs sm:text-sm font-bold shadow-sm hover:shadow transition active:scale-95 cursor-pointer"
+            >
+              <span className="text-base font-black leading-none">+</span>
+              <span>Add Candle</span>
+            </button>
+
+            {/* Store Link */}
+            <Link
+              href="/"
+              className="hidden sm:inline-flex items-center rounded-full bg-white/80 border border-[#8a614820] px-3 py-1 text-xs font-medium text-[#765442] hover:text-ink hover:bg-white transition active:scale-95"
+            >
+              Store ↗
+            </Link>
+          </div>
+        </div>
+
+        {/* ==================================================== */}
+        {/* 2. MODERN SEGMENTED TAB BAR                          */}
+        {/* ==================================================== */}
+        <div className="mx-auto max-w-7xl px-3 sm:px-6 pt-1 pb-2 flex items-center justify-between border-t border-[#8a614810]">
+          <nav className="flex items-center gap-1 sm:gap-2 w-full max-w-md bg-[#ead8c2]/60 p-1 rounded-2xl">
+            <button
+              type="button"
+              onClick={() => setActiveTab("orders")}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition active:scale-95 cursor-pointer ${
+                activeTab === "orders"
+                  ? "bg-white text-ink shadow-xs"
+                  : "text-[#765442] hover:text-ink hover:bg-white/40"
+              }`}
+            >
+              <span>📦 Orders</span>
+              <span
+                className={`rounded-full px-1.5 py-0.2 text-[10px] sm:text-xs font-black ${
+                  stats.pendingAction > 0
+                    ? "bg-clay text-white animate-pulse"
+                    : activeTab === "orders"
+                    ? "bg-[#8a614820] text-ink"
+                    : "bg-[#8a614815] text-[#765442]"
+                }`}
+              >
+                {orders.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("products")}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition active:scale-95 cursor-pointer ${
+                activeTab === "products"
+                  ? "bg-white text-ink shadow-xs"
+                  : "text-[#765442] hover:text-ink hover:bg-white/40"
+              }`}
+            >
+              <span>🕯️ Products</span>
+              <span className="rounded-full bg-[#8a614815] px-1.5 py-0.2 text-[10px] sm:text-xs font-semibold text-[#765442]">
+                {products.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("settings")}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition active:scale-95 cursor-pointer ${
+                activeTab === "settings"
+                  ? "bg-white text-ink shadow-xs"
+                  : "text-[#765442] hover:text-ink hover:bg-white/40"
+              }`}
+            >
+              <span>⚙️ Settings</span>
+            </button>
+          </nav>
+
+          {/* Sound test button (small) */}
+          <button
+            type="button"
+            onClick={playOrderChime}
+            className="hidden sm:inline-flex items-center gap-1 text-[11px] font-semibold text-[#8a6148] hover:text-clay hover:underline cursor-pointer"
+            title="Test the order chime sound"
+          >
+            <span>🔔</span> Test Chime
+          </button>
         </div>
       </header>
 
-      <div className="mx-auto max-w-7xl px-3.5 py-6 sm:px-5 sm:py-9">
-        {/* Real-time New Order Received Banner */}
-        {newOrderAlert && (
-          <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl bg-gradient-to-r from-[#ffeacc] via-[#fedbb3] to-[#ffe5c4] p-3.5 sm:p-4 border-2 border-[#e5832d] shadow-lg animate-pulse">
-            <div className="flex items-start sm:items-center gap-3">
-              <span className="flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-2xl bg-ink text-xl sm:text-2xl text-white shadow-sm shrink-0">
-                🕯️
-              </span>
-              <div className="min-w-0">
-                <p className="text-sm font-bold text-ink flex items-center gap-1.5 flex-wrap">
-                  <span>New Customer Order Received!</span>
-                  <span className="rounded-full bg-clay text-white text-[10px] sm:text-[11px] px-2 py-0.5 font-semibold">
-                    {newOrderAlert.id}
-                  </span>
-                  <span className="text-xs font-bold text-clay">₹{newOrderAlert.total}</span>
-                </p>
-                <p className="text-xs text-[#765442] mt-0.5 break-words">
-                  Customer: <b>{newOrderAlert.customer.name}</b> (<a href={`tel:${newOrderAlert.customer.phone}`} className="underline">{newOrderAlert.customer.phone}</a>) · {newOrderAlert.customer.address}
-                </p>
+      {/* ==================================================== */}
+      {/* 3. PERSISTENT FLOATING NEW ORDER NOTIFICATION BANNER */}
+      {/* ==================================================== */}
+      {newOrderAlert && (
+        <div className="fixed top-3 sm:top-5 inset-x-3 sm:inset-x-auto sm:right-6 z-50 sm:max-w-md animate-bounce">
+          <div className="rounded-2xl bg-gradient-to-r from-[#ffe4be] via-[#ffd6a2] to-[#ffecce] p-4 border-2 border-clay shadow-2xl backdrop-blur-md">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-clay text-2xl text-white shadow-md">
+                  🕯️
+                </span>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="font-black text-ink text-sm uppercase tracking-wide">
+                      New Order Came!
+                    </span>
+                    <span className="rounded-md bg-ink px-1.5 py-0.5 text-[10px] font-mono font-bold text-white">
+                      {newOrderAlert.id}
+                    </span>
+                  </div>
+                  <p className="text-xs font-bold text-clay mt-0.5">
+                    ₹{newOrderAlert.total} · {newOrderAlert.customer.name}
+                  </p>
+                  <p className="text-[11px] text-[#765442] truncate max-w-[240px]">
+                    {newOrderAlert.items.map((i) => `${i.quantity}× ${i.name}`).join(", ")}
+                  </p>
+                </div>
               </div>
-            </div>
-            <div className="flex items-center gap-2 flex-wrap pt-2 sm:pt-0 border-t border-[#e5832d]/30 sm:border-t-0">
-              {newOrderAlert.screenshot && !newOrderAlert.screenshot.startsWith("PHONEPE_") && !newOrderAlert.screenshot.startsWith("CASHFREE_") && (
-                <button
-                  type="button"
-                  onClick={() => setSelectedScreenshotOrder(newOrderAlert)}
-                  className="rounded-xl bg-ink px-3 py-1.5 text-xs font-semibold text-white hover:bg-clay transition shadow-sm cursor-pointer active:scale-95"
-                >
-                  View Payment Proof
-                </button>
-              )}
-              {(newOrderAlert.screenshot?.startsWith("CASHFREE_") || newOrderAlert.paymentMethod === "Cashfree Gateway") && (
-                <span className="inline-flex items-center gap-1 rounded-xl bg-blue-600 px-2.5 py-1 text-xs font-bold text-white shadow-sm">
-                  ⚡ Cashfree Auto-Verified
-                </span>
-              )}
-              {newOrderAlert.screenshot?.startsWith("PHONEPE_") && (
-                <span className="inline-flex items-center gap-1 rounded-xl bg-purple-700 px-2.5 py-1 text-xs font-bold text-white shadow-sm">
-                  ⚡ PhonePe Auto-Verified
-                </span>
-              )}
+
               <button
                 type="button"
                 onClick={() => setNewOrderAlert(null)}
-                className="rounded-xl border border-[#8a61483a] bg-white px-3 py-1.5 text-xs font-medium text-[#765442] hover:bg-stone-100 transition cursor-pointer active:scale-95"
+                className="text-[#765442] hover:text-ink font-bold text-sm p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="mt-3 pt-2.5 border-t border-[#8a614825] flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setNewOrderAlert(null)}
+                className="rounded-xl bg-white/80 px-3 py-1.5 text-xs font-semibold text-[#765442] hover:bg-white transition"
               >
                 Dismiss
               </button>
+              <button
+                type="button"
+                onClick={() => viewNewOrderDetails(newOrderAlert)}
+                className="rounded-xl bg-clay hover:bg-ink text-white px-3.5 py-1.5 text-xs font-bold shadow-xs transition active:scale-95 cursor-pointer"
+              >
+                View Order ↗
+              </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Main Container */}
+      <div className="mx-auto max-w-7xl px-3 sm:px-6 py-4 sm:py-6">
+        {/* Notice alert toast */}
+        {notice && (
+          <div className="mb-4 flex items-center justify-between gap-2 rounded-2xl bg-[#e5eedc] border border-[#c4dcbc] p-3 text-xs sm:text-sm font-semibold text-moss shadow-2xs animate-in fade-in">
+            <span>{notice}</span>
+            <button
+              type="button"
+              onClick={() => setNotice("")}
+              className="p-1 hover:opacity-75 font-bold"
+            >
+              ✕
+            </button>
           </div>
         )}
 
-        {notice && <p className="mb-5 rounded-xl bg-[#e5eedc] p-3 text-sm text-moss border border-[#c4dcbc]">{notice}</p>}
-        <h1 className="display text-3xl sm:text-5xl font-bold text-ink tracking-tight">Good morning, maker.</h1>
-        <p className="mt-1.5 text-xs sm:text-sm text-[#765442]">Orders, products and payment details in one calm place.</p>
-
-        {/* Incoming Orders Section */}
-        <section className="mt-8 sm:mt-10">
-          <div className="mb-4 flex flex-col sm:flex-row sm:items-end justify-between gap-3">
-            <div>
-              <h2 className="display text-2xl sm:text-3xl text-ink font-bold">Incoming orders</h2>
-              <p className="mt-1 text-xs sm:text-sm text-[#765442]">
-                {orders.length} order{orders.length === 1 ? "" : "s"} received
-              </p>
+        {/* ==================================================== */}
+        {/* 4. STUDIO QUICK STATS BAR                            */}
+        {/* ==================================================== */}
+        <section className="mb-5 grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-4">
+          <div
+            onClick={() => { setActiveTab("orders"); setOrderFilter("All"); }}
+            className="rounded-2xl border border-[#8a614820] bg-white/90 p-3 sm:p-4 shadow-2xs hover:border-clay transition cursor-pointer active:scale-98"
+          >
+            <div className="flex items-center justify-between text-xs text-[#765442] font-semibold uppercase tracking-wider">
+              <span>Total Orders</span>
+              <span>📦</span>
             </div>
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <span className="text-xs font-semibold uppercase tracking-wider text-[#765442] shrink-0 sm:hidden">Filter:</span>
-              <select
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-                className="w-full sm:w-auto rounded-xl border border-[#8a614830] bg-white px-3.5 py-2 text-base sm:text-sm text-ink outline-clay shadow-2xs font-medium cursor-pointer"
-              >
-                <option>All</option>
-                {statuses.map((s) => (
-                  <option key={s}>{s}</option>
-                ))}
-              </select>
+            <div className="mt-1 text-xl sm:text-2xl font-black text-ink">
+              {stats.totalOrders}
             </div>
+            <p className="text-[10px] text-emerald-700 font-medium mt-0.5">
+              Live studio orders
+            </p>
           </div>
 
-          {/* Mobile Order Cards View (< md) - No horizontal scrolling */}
-          <div className="space-y-3.5 md:hidden">
-            {shown.map((o) => (
-              <div
-                key={o.id}
-                className="rounded-2xl border border-[#8a614822] bg-white p-4 shadow-sm"
-              >
-                {/* Card Top: Order ID, Date, Amount */}
-                <div className="flex items-start justify-between gap-2 border-b border-[#8a614815] pb-2.5">
-                  <div>
-                    <span className="font-mono text-xs font-bold text-clay bg-[#8a614810] px-2 py-0.5 rounded-md">
-                      {o.id}
-                    </span>
-                    <p className="text-[11px] text-[#765442] mt-1">
-                      📅 {new Date(o.createdAt).toLocaleDateString()} · {new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-lg font-black text-clay">
-                      ₹{o.total}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Customer Details */}
-                <div className="mt-3 rounded-xl bg-[#fffaf4] border border-[#8a614815] p-3 text-xs">
-                  <p className="font-bold text-ink text-sm flex items-center gap-1.5">
-                    <span>👤</span> {o.customer.name}
-                  </p>
-                  <p className="mt-1">
-                    <a
-                      href={`tel:${o.customer.phone}`}
-                      className="inline-flex items-center gap-1 font-semibold text-clay underline hover:text-ink transition"
-                    >
-                      <span>📞</span> {o.customer.phone}
-                    </a>
-                  </p>
-                  <p className="text-[#765442] mt-1 text-[11px] flex items-start gap-1 break-words">
-                    <span>📍</span> <span>{o.customer.address}</span>
-                  </p>
-                </div>
-
-                {/* Items Ordered */}
-                <div className="mt-3">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-[#765442] mb-1">
-                    Ordered Candles ({o.items.reduce((sum, item) => sum + (item.quantity || 1), 0)})
-                  </p>
-                  <div className="space-y-1">
-                    {o.items.map((item, idx) => (
-                      <div
-                        key={idx}
-                        className="flex items-center justify-between text-xs py-1 border-b border-[#8a61480f] last:border-0"
-                      >
-                        <span className="font-medium text-ink">
-                          {item.quantity}× {item.name}
-                        </span>
-                        <span className="text-[#765442] font-semibold">
-                          ₹{item.price * item.quantity}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Payment Status & Proof */}
-                <div className="mt-3 pt-2.5 border-t border-[#8a614815] flex items-center justify-between flex-wrap gap-2">
-                  <span className="text-[11px] font-semibold uppercase tracking-wide text-[#765442]">
-                    Payment:
-                  </span>
-                  <div>
-                    {o.paymentMethod === "Cashfree Gateway" || (o.screenshot && o.screenshot.startsWith("CASHFREE_")) ? (
-                      o.paymentStatus === "FAILED" || o.status === "Payment Failed" ? (
-                        <span className="inline-flex items-center gap-1 rounded-lg bg-rose-50 border border-rose-200 px-2 py-0.5 text-xs font-semibold text-rose-700">
-                          ✕ Cashfree Failed
-                        </span>
-                      ) : o.paymentStatus === "PENDING" || o.status === "Payment Pending" ? (
-                        <div className="flex items-center gap-1.5">
-                          <span className="inline-flex items-center gap-1 rounded-lg bg-amber-50 border border-amber-200 px-2 py-0.5 text-xs font-semibold text-amber-700">
-                            ⏳ Cashfree Pending
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => verifyGatewayOrder(o.id)}
-                            className="rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 px-2 py-0.5 text-[10px] font-bold"
-                          >
-                            🔄 Check
-                          </button>
-                        </div>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 rounded-lg bg-blue-50 border border-blue-200 px-2 py-0.5 text-xs font-bold text-blue-900">
-                          ⚡ Cashfree Verified ✓
-                        </span>
-                      )
-                    ) : o.paymentMethod === "PhonePe Gateway" || (o.screenshot && o.screenshot.startsWith("PHONEPE_")) ? (
-                      o.paymentStatus === "FAILED" || o.status === "Payment Failed" ? (
-                        <span className="inline-flex items-center gap-1 rounded-lg bg-rose-50 border border-rose-200 px-2 py-0.5 text-xs font-semibold text-rose-700">
-                          ✕ PhonePe Failed
-                        </span>
-                      ) : o.paymentStatus === "PENDING" || o.status === "Payment Pending" ? (
-                        <span className="inline-flex items-center gap-1 rounded-lg bg-amber-50 border border-amber-200 px-2 py-0.5 text-xs font-semibold text-amber-700">
-                          ⏳ PhonePe Pending
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 rounded-lg bg-purple-50 border border-purple-200 px-2 py-0.5 text-xs font-bold text-purple-900">
-                          ⚡ PhonePe Verified ✓
-                        </span>
-                      )
-                    ) : o.screenshot ? (
-                      <button
-                        type="button"
-                        onClick={() => setSelectedScreenshotOrder(o)}
-                        className="inline-flex items-center gap-1.5 rounded-xl border border-clay/30 bg-[#fff8ed] px-2.5 py-1 text-xs font-semibold text-clay hover:bg-clay hover:text-white transition shadow-2xs active:scale-95"
-                      >
-                        <img src={o.screenshot} alt="" className="h-5 w-5 rounded object-cover" />
-                        <span>View Proof Photo</span>
-                        <span className="text-[10px] opacity-75">↗</span>
-                      </button>
-                    ) : o.screenshotExpired || getScreenshotExpiryInfo(o.createdAt, o.screenshotExpiresAt).isExpired ? (
-                      <span className="text-[11px] text-stone-500 bg-stone-100 px-2 py-0.5 rounded">
-                        Expired (Purged)
-                      </span>
-                    ) : (
-                      <span className="text-xs text-[#9a7b6a]">—</span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Order Status Selector */}
-                <div className="mt-3 pt-2.5 border-t border-[#8a614815]">
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-[#765442] mb-1">
-                    Update Order Status
-                  </label>
-                  <select
-                    value={o.status}
-                    onChange={(e) => status(o.id, e.target.value as OrderStatus)}
-                    className={`w-full rounded-xl border font-bold p-2.5 text-xs transition cursor-pointer shadow-2xs ${
-                      o.status === "Delivered"
-                        ? "bg-emerald-50 text-emerald-800 border-emerald-300"
-                        : o.status === "Out for Delivery"
-                        ? "bg-purple-50 text-purple-800 border-purple-300"
-                        : o.status === "Preparing"
-                        ? "bg-amber-50 text-amber-800 border-amber-300"
-                        : o.status === "Payment Pending"
-                        ? "bg-orange-50 text-orange-800 border-orange-300"
-                        : o.status === "Payment Failed"
-                        ? "bg-rose-50 text-rose-800 border-rose-300"
-                        : "bg-sky-50 text-sky-800 border-sky-300"
-                    }`}
-                  >
-                    {statuses.map((s) => (
-                      <option key={s} value={s}>
-                        {s === "Delivered"
-                          ? "✓ Delivered"
-                          : s === "Out for Delivery"
-                          ? "🚚 Out for Delivery"
-                          : s === "Preparing"
-                          ? "🕯️ Preparing"
-                          : s === "Payment Pending"
-                          ? "⏳ Payment Pending"
-                          : s === "Payment Failed"
-                          ? "✕ Payment Failed"
-                          : "📋 Order Received"}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            ))}
-            {!shown.length && (
-              <div className="rounded-2xl border border-[#8a614825] bg-white p-8 text-center text-xs text-[#765442]">
-                No orders in this view yet.
-              </div>
-            )}
+          <div
+            onClick={() => { setActiveTab("orders"); setOrderFilter("Order Received"); }}
+            className={`rounded-2xl border p-3 sm:p-4 shadow-2xs transition cursor-pointer active:scale-98 ${
+              stats.pendingAction > 0
+                ? "border-amber-400 bg-amber-50/70"
+                : "border-[#8a614820] bg-white/90"
+            }`}
+          >
+            <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-[#765442]">
+              <span>Needs Action</span>
+              <span>⏳</span>
+            </div>
+            <div className={`mt-1 text-xl sm:text-2xl font-black ${stats.pendingAction > 0 ? "text-amber-900" : "text-ink"}`}>
+              {stats.pendingAction}
+            </div>
+            <p className="text-[10px] text-[#765442] font-medium mt-0.5">
+              Received / Pending pay
+            </p>
           </div>
 
-          {/* Desktop Table View (>= md) */}
-          <div className="hidden md:block overflow-x-auto rounded-2xl border border-[#8a61483a] bg-white">
-            <table className="w-full min-w-[850px] text-left text-sm">
-              <thead className="bg-[#eadcc9] text-xs uppercase tracking-wide text-[#765442]">
-                <tr>
-                  <th className="p-3">Order</th>
-                  <th>Customer</th>
-                  <th>Items</th>
-                  <th>Total</th>
-                  <th>Payment</th>
-                  <th>Status</th>
-                  <th>Received</th>
-                </tr>
-              </thead>
-              <tbody>
-                {shown.map((o) => (
-                  <tr key={o.id} className="border-t border-[#8a61481f]">
-                    <td className="p-3 font-medium text-clay">{o.id}</td>
-                    <td>
-                      <b>{o.customer.name}</b>
-                      <br />
-                      <span className="text-xs text-[#765442]">
-                        <a href={`tel:${o.customer.phone}`} className="underline hover:text-ink">{o.customer.phone}</a>
-                        <br />
-                        {o.customer.address}
-                      </span>
-                    </td>
-                    <td>
-                      {o.items.map((i) => (
-                        <div key={i.id}>
-                          {i.quantity}× {i.name}
-                        </div>
-                      ))}
-                    </td>
-                    <td>₹{o.total}</td>
-                    <td>
-                      {o.paymentMethod === "Cashfree Gateway" || (o.screenshot && o.screenshot.startsWith("CASHFREE_")) ? (
-                        <div className="flex flex-col gap-1 py-1">
-                          {o.paymentStatus === "FAILED" || o.status === "Payment Failed" ? (
-                            <span className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-700 shadow-2xs">
-                              <span className="h-2 w-2 rounded-full bg-rose-500" />
-                              Cashfree Failed
-                            </span>
-                          ) : o.paymentStatus === "PENDING" || o.status === "Payment Pending" ? (
-                            <div className="flex flex-col items-start gap-1">
-                              <span className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-700 shadow-2xs">
-                                <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
-                                Cashfree Pending
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => verifyGatewayOrder(o.id)}
-                                className="inline-flex items-center gap-1 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 px-2 py-0.5 text-[10px] font-bold transition cursor-pointer shadow-2xs"
-                                title="Query Cashfree API to verify if customer payment was completed"
-                              >
-                                🔄 Check Status
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="inline-flex flex-col gap-1 rounded-xl border border-blue-200 bg-blue-50/90 p-2 text-xs shadow-2xs">
-                              <div className="flex items-center gap-1.5 font-bold text-blue-900">
-                                <span className="flex h-2 w-2 relative">
-                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                                  <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-600"></span>
-                                </span>
-                                <span>⚡ Cashfree Verified ✓</span>
-                              </div>
-                              <div className="text-[10px] text-blue-800 font-mono break-all select-all">
-                                {o.transactionId || o.cashfreePaymentId || (o.screenshot?.includes(":") ? o.screenshot.split(":")[1] : "CF-VERIFIED")}
-                              </div>
-                              <span className="text-[9px] text-blue-600 font-medium">Gateway S2S Confirmed</span>
-                            </div>
-                          )}
-                        </div>
-                      ) : o.paymentMethod === "PhonePe Gateway" || (o.screenshot && o.screenshot.startsWith("PHONEPE_")) ? (
-                        <div className="flex flex-col gap-1 py-1">
-                          {o.paymentStatus === "FAILED" || o.status === "Payment Failed" ? (
-                            <span className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-700 shadow-2xs">
-                              <span className="h-2 w-2 rounded-full bg-rose-500" />
-                              PhonePe Failed
-                            </span>
-                          ) : o.paymentStatus === "PENDING" || o.status === "Payment Pending" ? (
-                            <span className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-700 shadow-2xs">
-                              <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
-                              PhonePe Pending
-                            </span>
-                          ) : (
-                            <div className="inline-flex flex-col gap-1 rounded-xl border border-purple-200 bg-purple-50/90 p-2 text-xs shadow-2xs">
-                              <div className="flex items-center gap-1.5 font-bold text-purple-900">
-                                <span className="flex h-2 w-2 relative">
-                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
-                                  <span className="relative inline-flex rounded-full h-2 w-2 bg-purple-600"></span>
-                                </span>
-                                <span>⚡ PhonePe Verified ✓</span>
-                              </div>
-                              <div className="text-[10px] text-purple-700 font-mono break-all select-all">
-                                {o.transactionId || (o.screenshot?.includes(":") ? o.screenshot.split(":")[1] : o.phonepeTransactionId || "S2S Verified")}
-                              </div>
-                              <span className="text-[9px] text-purple-500 font-medium">Gateway S2S Confirmed</span>
-                            </div>
-                          )}
-                        </div>
-                      ) : o.screenshot ? (
-                        <div className="flex flex-col gap-1 py-1">
-                          <button
-                            type="button"
-                            onClick={() => setSelectedScreenshotOrder(o)}
-                            className="group flex items-center gap-2.5 rounded-xl border border-[#8a61482a] bg-[#fffaf3] p-1.5 hover:border-clay hover:shadow-md transition text-left cursor-pointer"
-                            title="Click to view full payment screenshot"
-                          >
-                            <div className="relative h-11 w-11 flex-shrink-0 overflow-hidden rounded-lg bg-stone-100 border border-[#8a614818]">
-                              <img
-                                src={o.screenshot}
-                                alt="Payment proof thumbnail"
-                                className="h-full w-full object-cover group-hover:scale-105 transition"
-                              />
-                            </div>
-                            <div className="min-w-0 pr-1">
-                              <span className="inline-flex items-center gap-1 text-xs font-semibold text-clay underline">
-                                View Proof
-                                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                </svg>
-                              </span>
-                              <p className="text-[10px] text-[#8a4e1d] font-medium mt-0.5">
-                                ⏱ {getScreenshotExpiryInfo(o.createdAt, o.screenshotExpiresAt).timeLeftText}
-                              </p>
-                            </div>
-                          </button>
-                        </div>
-                      ) : o.screenshotExpired || getScreenshotExpiryInfo(o.createdAt, o.screenshotExpiresAt).isExpired ? (
-                        <div className="inline-flex flex-col text-xs text-[#9a7b6a] py-1">
-                          <span className="inline-flex items-center gap-1 rounded-md bg-stone-100 px-2 py-1 font-medium text-stone-500 border border-stone-200">
-                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            Expired (3d limit)
-                          </span>
-                          <span className="text-[10px] text-stone-400 mt-0.5">Purged from storage</span>
-                        </div>
-                      ) : (
-                        <span className="text-xs text-[#9a7b6a]">—</span>
-                      )}
-                    </td>
-                    <td>
-                      <div className="flex flex-col gap-1 py-1">
-                        <select
-                          value={o.status}
-                          onChange={(e) => status(o.id, e.target.value as OrderStatus)}
-                          className={`rounded-xl border font-semibold p-2 text-xs transition cursor-pointer shadow-2xs ${
-                            o.status === "Delivered"
-                              ? "bg-emerald-50 text-emerald-800 border-emerald-300"
-                              : o.status === "Out for Delivery"
-                              ? "bg-purple-50 text-purple-800 border-purple-300"
-                              : o.status === "Preparing"
-                              ? "bg-amber-50 text-amber-800 border-amber-300"
-                              : o.status === "Payment Pending"
-                              ? "bg-orange-50 text-orange-800 border-orange-300"
-                              : o.status === "Payment Failed"
-                              ? "bg-rose-50 text-rose-800 border-rose-300"
-                              : "bg-sky-50 text-sky-800 border-sky-300"
-                          }`}
-                        >
-                          {statuses.map((s) => (
-                            <option key={s} value={s}>
-                              {s === "Delivered"
-                                ? "✓ Delivered"
-                                : s === "Out for Delivery"
-                                ? "🚚 Out for Delivery"
-                                : s === "Preparing"
-                                ? "🕯️ Preparing"
-                                : s === "Payment Pending"
-                                ? "⏳ Payment Pending"
-                                : s === "Payment Failed"
-                                ? "✕ Payment Failed"
-                                : "📋 Order Received"}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </td>
-                    <td className="text-xs text-[#765442]">
-                      {new Date(o.createdAt).toLocaleDateString()}
-                    </td>
-                  </tr>
-                ))}
-                {!shown.length && (
-                  <tr>
-                    <td colSpan={7} className="p-8 text-center text-[#765442]">
-                      No orders in this view yet.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+          <div
+            onClick={() => setActiveTab("products")}
+            className="rounded-2xl border border-[#8a614820] bg-white/90 p-3 sm:p-4 shadow-2xs hover:border-clay transition cursor-pointer active:scale-98"
+          >
+            <div className="flex items-center justify-between text-xs text-[#765442] font-semibold uppercase tracking-wider">
+              <span>Collection</span>
+              <span>🕯️</span>
+            </div>
+            <div className="mt-1 text-xl sm:text-2xl font-black text-ink">
+              {stats.activeProducts} <span className="text-xs text-[#765442] font-normal">/ {stats.totalProducts}</span>
+            </div>
+            <p className="text-[10px] text-[#765442] font-medium mt-0.5">
+              In-stock candles
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-[#8a614820] bg-white/90 p-3 sm:p-4 shadow-2xs">
+            <div className="flex items-center justify-between text-xs text-[#765442] font-semibold uppercase tracking-wider">
+              <span>Total Revenue</span>
+              <span>₹</span>
+            </div>
+            <div className="mt-1 text-xl sm:text-2xl font-black text-clay">
+              ₹{stats.totalRevenue.toLocaleString("en-IN")}
+            </div>
+            <p className="text-[10px] text-emerald-700 font-medium mt-0.5">
+              Sales made to date
+            </p>
           </div>
         </section>
 
-        {/* Collection & Settings Grid */}
-        <section className="mt-10 sm:mt-14 grid gap-8 lg:grid-cols-2">
-          {/* Collection Column */}
-          <div>
-            <div className="flex items-center justify-between">
-              <h2 className="display text-2xl sm:text-3xl font-bold text-ink">Collection</h2>
-              <span className="text-xs font-semibold text-[#765442] bg-[#8a614815] px-2.5 py-1 rounded-full">
-                {products.length} candle{products.length === 1 ? "" : "s"}
-              </span>
+        {/* ==================================================== */}
+        {/* TAB 1: INCOMING & PREVIOUS ORDERS                   */}
+        {/* ==================================================== */}
+        {activeTab === "orders" && (
+          <section className="space-y-4">
+            {/* Orders Header & Search / Filter Controls */}
+            <div className="rounded-2xl sm:rounded-3xl bg-white/90 border border-[#8a614825] p-3.5 sm:p-5 shadow-sm">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-[#8a614815]">
+                <div>
+                  <h2 className="display text-xl sm:text-2xl font-bold text-ink flex items-center gap-2">
+                    <span>Incoming & Previous Orders</span>
+                    <span className="text-xs font-mono font-normal text-[#765442] bg-[#8a614815] px-2.5 py-0.5 rounded-full">
+                      {filteredOrders.length} shown
+                    </span>
+                  </h2>
+                  <p className="text-xs text-[#765442] mt-0.5">
+                    Browse orders with zero endless scrolling. Search by Customer, Phone, or Order ID.
+                  </p>
+                </div>
+
+                {/* Card / Table View Toggle (Desktop) & Expand/Collapse all */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={expandAllOrders}
+                    className="rounded-xl border border-[#8a614825] bg-white px-2.5 py-1 text-xs font-semibold text-[#765442] hover:text-ink hover:bg-stone-50 transition active:scale-95 shadow-2xs cursor-pointer"
+                  >
+                    Expand All
+                  </button>
+                  <button
+                    type="button"
+                    onClick={collapseAllOrders}
+                    className="rounded-xl border border-[#8a614825] bg-white px-2.5 py-1 text-xs font-semibold text-[#765442] hover:text-ink hover:bg-stone-50 transition active:scale-95 shadow-2xs cursor-pointer"
+                  >
+                    Collapse All
+                  </button>
+                  <div className="hidden md:flex items-center rounded-xl bg-[#ead8c2]/50 p-0.5 border border-[#8a614820]">
+                    <button
+                      type="button"
+                      onClick={() => setOrderViewMode("cards")}
+                      className={`px-2.5 py-1 text-xs font-bold rounded-lg transition ${
+                        orderViewMode === "cards" ? "bg-white text-ink shadow-2xs" : "text-[#765442]"
+                      }`}
+                    >
+                      Cards
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setOrderViewMode("table")}
+                      className={`px-2.5 py-1 text-xs font-bold rounded-lg transition ${
+                        orderViewMode === "table" ? "bg-white text-ink shadow-2xs" : "text-[#765442]"
+                      }`}
+                    >
+                      Table
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Search Bar & Sorter */}
+              <div className="mt-3 flex flex-col sm:flex-row gap-2.5">
+                <div className="relative flex-1">
+                  <span className="absolute left-3.5 top-2.5 text-stone-400 text-sm">🔍</span>
+                  <input
+                    type="text"
+                    value={orderSearchQuery}
+                    onChange={(e) => {
+                      setOrderSearchQuery(e.target.value);
+                      setCurrentOrderPage(1);
+                    }}
+                    placeholder="Search by order ID (e.g. CM-), customer name, or phone..."
+                    className="w-full rounded-xl border border-[#8a614830] bg-white pl-9 pr-8 py-2 text-sm text-ink outline-clay shadow-2xs"
+                  />
+                  {orderSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setOrderSearchQuery("")}
+                      className="absolute right-2.5 top-2 text-stone-400 hover:text-ink text-xs font-bold"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <select
+                    value={orderSortBy}
+                    onChange={(e) => setOrderSortBy(e.target.value as any)}
+                    className="rounded-xl border border-[#8a614830] bg-white px-3 py-2 text-xs font-semibold text-ink outline-clay shadow-2xs cursor-pointer"
+                  >
+                    <option value="newest">Newest First</option>
+                    <option value="oldest">Oldest First</option>
+                    <option value="highest">Highest Amount</option>
+                  </select>
+
+                  <select
+                    value={ordersPerPage}
+                    onChange={(e) => {
+                      setOrdersPerPage(Number(e.target.value));
+                      setCurrentOrderPage(1);
+                    }}
+                    className="rounded-xl border border-[#8a614830] bg-white px-2.5 py-2 text-xs font-semibold text-ink outline-clay shadow-2xs cursor-pointer"
+                  >
+                    <option value={10}>10 per page</option>
+                    <option value={20}>20 per page</option>
+                    <option value={50}>50 per page</option>
+                    <option value={0}>Show all</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Status Filter Chips */}
+              <div className="mt-3 flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
+                {[
+                  { key: "All", label: "All" },
+                  { key: "Order Received", label: "📋 Received" },
+                  { key: "Preparing", label: "🕯️ Preparing" },
+                  { key: "Out for Delivery", label: "🚚 Out for Delivery" },
+                  { key: "Delivered", label: "✓ Delivered" },
+                  { key: "Payment Pending", label: "⏳ Pending Pay" },
+                ].map((st) => (
+                  <button
+                    key={st.key}
+                    type="button"
+                    onClick={() => {
+                      setOrderFilter(st.key);
+                      setCurrentOrderPage(1);
+                    }}
+                    className={`shrink-0 rounded-full px-3 py-1.5 font-bold transition active:scale-95 cursor-pointer shadow-2xs ${
+                      orderFilter === st.key
+                        ? "bg-ink text-white"
+                        : "bg-white border border-[#8a614820] text-[#765442] hover:bg-stone-50"
+                    }`}
+                  >
+                    <span>{st.label}</span>{" "}
+                    <span className="ml-1 opacity-75 font-mono">
+                      ({orderCounts[st.key] || 0})
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
 
-            <div className="mt-4 space-y-4">
-              {products.map((p) => (
-                <div
-                  key={p.id}
-                  className="rounded-2xl border border-[#8a614820] bg-white p-3.5 sm:p-4 shadow-sm"
-                >
-                  <div className="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4">
-                    {/* Top Row for Mobile: Image + Details + Stock */}
-                    <div className="flex items-start gap-3 flex-1 min-w-0">
-                      <img
-                        src={p.images?.[0] || "/hero-candle.jpg"}
-                        alt={p.name}
-                        className="h-16 w-16 sm:h-20 sm:w-20 rounded-xl object-cover border border-[#8a61481a] shrink-0"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <b className="text-sm sm:text-base text-ink truncate font-bold">{p.name}</b>
-                          <span className="rounded-full bg-[#8a614815] px-2 py-0.5 text-[10px] font-bold text-clay shrink-0">
-                            {p.category}
+            {/* Orders Listing: Compact Mobile Accordions */}
+            {orderViewMode === "cards" || typeof window !== "undefined" && window.innerWidth < 768 ? (
+              <div className="space-y-3">
+                {paginatedOrders.map((o) => {
+                  const isExpanded = expandedOrderIds[o.id];
+                  const isHighlighted = highlightedOrderId === o.id;
+
+                  return (
+                    <div
+                      key={o.id}
+                      ref={(el) => { orderCardRefs.current[o.id] = el; }}
+                      className={`rounded-2xl sm:rounded-3xl border bg-white shadow-2xs transition-all ${
+                        isHighlighted
+                          ? "border-amber-400 ring-4 ring-amber-300/50 bg-amber-50/40"
+                          : "border-[#8a614820] hover:border-[#8a614840]"
+                      }`}
+                    >
+                      {/* Accordion Card Header - Click anywhere to expand/collapse */}
+                      <div
+                        onClick={() => toggleOrderExpand(o.id)}
+                        className="p-3.5 sm:p-4 flex items-center justify-between gap-3 cursor-pointer select-none hover:bg-stone-50/60 transition rounded-2xl"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-mono text-xs font-extrabold text-clay bg-[#8a614812] px-2 py-0.5 rounded-md">
+                              {o.id}
+                            </span>
+                            <span className="text-xs text-[#765442]">
+                              • {formatRelativeTime(o.createdAt)}
+                            </span>
+
+                            {/* Status Pill */}
+                            <span
+                              className={`rounded-full px-2.5 py-0.5 text-[10px] sm:text-xs font-bold ${
+                                o.status === "Delivered"
+                                  ? "bg-emerald-100 text-emerald-900 border border-emerald-300"
+                                  : o.status === "Out for Delivery"
+                                  ? "bg-purple-100 text-purple-900 border border-purple-300"
+                                  : o.status === "Preparing"
+                                  ? "bg-amber-100 text-amber-900 border border-amber-300"
+                                  : o.status === "Payment Pending"
+                                  ? "bg-orange-100 text-orange-900 border border-orange-300"
+                                  : o.status === "Payment Failed"
+                                  ? "bg-rose-100 text-rose-900 border border-rose-300"
+                                  : "bg-sky-100 text-sky-900 border border-sky-300"
+                              }`}
+                            >
+                              {o.status}
+                            </span>
+                          </div>
+
+                          {/* Customer & Items Summary */}
+                          <div className="mt-1.5 flex items-center justify-between gap-2">
+                            <div className="truncate">
+                              <span className="font-bold text-ink text-sm sm:text-base">
+                                {o.customer.name}
+                              </span>
+                              <span className="text-xs text-[#765442] ml-2 truncate hidden sm:inline">
+                                ({o.items.map((i) => `${i.quantity}× ${i.name}`).join(", ")})
+                              </span>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <span className="text-base sm:text-lg font-black text-clay">
+                                ₹{o.total}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Quick Payment Tag preview */}
+                          <div className="mt-1 flex items-center gap-1.5 text-[11px]">
+                            {o.paymentMethod === "Cashfree Gateway" || (o.screenshot && o.screenshot.startsWith("CASHFREE_")) ? (
+                              <span className="text-blue-700 font-semibold">⚡ Cashfree Gateway</span>
+                            ) : o.paymentMethod === "PhonePe Gateway" || (o.screenshot && o.screenshot.startsWith("PHONEPE_")) ? (
+                              <span className="text-purple-700 font-semibold">⚡ PhonePe Gateway</span>
+                            ) : o.screenshot ? (
+                              <span className="text-emerald-700 font-semibold">📷 Proof Photo Attached</span>
+                            ) : (
+                              <span className="text-stone-500">Standard Checkout</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Expand Chevron Icon */}
+                        <div className="flex items-center justify-center h-8 w-8 rounded-full bg-[#8a614810] text-[#765442] shrink-0">
+                          <span
+                            className={`transform transition-transform duration-200 text-xs font-bold ${
+                              isExpanded ? "rotate-180" : ""
+                            }`}
+                          >
+                            ▼
                           </span>
                         </div>
-                        <p className="text-sm font-extrabold text-clay mt-0.5">₹{p.price}</p>
+                      </div>
 
-                        {/* Active specifications badges */}
-                        <div className="mt-1.5 flex flex-wrap gap-1 text-[10px]">
-                          {p.fragrance && (
-                            <span className="inline-flex items-center gap-1 rounded-md bg-[#f4ece3] px-2 py-0.5 text-[#6c4832] font-medium">
-                              🌸 {p.fragrance}
-                            </span>
-                          )}
-                          {p.wickSize && (
-                            <span className="inline-flex items-center gap-1 rounded-md bg-[#f4ece3] px-2 py-0.5 text-[#6c4832] font-medium">
-                              🕯️ Wick: {p.wickSize}
-                            </span>
-                          )}
-                          {p.candleDimensions && (
-                            <span className="inline-flex items-center gap-1 rounded-md bg-[#f4ece3] px-2 py-0.5 text-[#6c4832] font-medium">
-                              📏 {p.candleDimensions}
-                            </span>
-                          )}
-                          {p.burnTime && (
-                            <span className="inline-flex items-center gap-1 rounded-md bg-[#f4ece3] px-2 py-0.5 text-[#6c4832] font-medium">
-                              ⏳ {p.burnTime}
-                            </span>
-                          )}
-                          {p.ingredients && (
-                            <span className="inline-flex items-center gap-1 rounded-md bg-[#f4ece3] px-2 py-0.5 text-[#6c4832] font-medium">
-                              🌿 {p.ingredients}
-                            </span>
-                          )}
+                      {/* Accordion Expanded Body */}
+                      {isExpanded && (
+                        <div className="px-3.5 pb-4 sm:px-5 sm:pb-5 pt-1 border-t border-[#8a614815] bg-[#fffcf7] rounded-b-2xl sm:rounded-b-3xl space-y-3.5 animate-in fade-in duration-200">
+                          {/* 1. Customer Details & Quick Contact Action Buttons */}
+                          <div className="rounded-2xl bg-white border border-[#8a614815] p-3 text-xs space-y-2">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#8a614810] pb-2">
+                              <div>
+                                <p className="font-bold text-ink text-sm">
+                                  👤 {o.customer.name}
+                                </p>
+                                <p className="text-[#765442] mt-0.5">
+                                  📞 {o.customer.phone}
+                                </p>
+                              </div>
+
+                              {/* Quick 1-Tap Customer Buttons */}
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <a
+                                  href={`tel:${o.customer.phone}`}
+                                  className="inline-flex items-center gap-1 rounded-xl bg-ink text-white px-3 py-1.5 font-bold hover:bg-clay transition active:scale-95 shadow-2xs"
+                                >
+                                  <span>📞 Call</span>
+                                </a>
+                                <a
+                                  href={getWhatsAppUrl(o)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 rounded-xl bg-[#25D366] text-white px-3 py-1.5 font-bold hover:bg-[#1EBE5D] transition active:scale-95 shadow-2xs"
+                                >
+                                  <span>💬 WhatsApp</span>
+                                </a>
+                                <button
+                                  type="button"
+                                  onClick={() => copyToClipboard(`${o.customer.name}\n${o.customer.phone}\n${o.customer.address}`, "Order Details")}
+                                  className="rounded-xl border border-[#8a614825] bg-white px-2.5 py-1.5 font-semibold text-[#765442] hover:bg-stone-50 transition active:scale-95 shadow-2xs"
+                                >
+                                  📋 Copy Info
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="flex items-start justify-between gap-2 pt-1">
+                              <p className="text-[#765442] text-xs leading-relaxed break-words">
+                                <span className="font-bold text-ink">📍 Delivery Address:</span> {o.customer.address}
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => copyToClipboard(o.customer.address, "Delivery Address")}
+                                className="shrink-0 text-[11px] text-clay font-semibold hover:underline"
+                              >
+                                Copy Address
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* 2. Ordered Candles Breakdown */}
+                          <div className="rounded-2xl bg-white border border-[#8a614815] p-3 text-xs">
+                            <div className="flex items-center justify-between text-[#765442] font-semibold uppercase tracking-wider text-[10px] pb-1.5 border-b border-[#8a614810]">
+                              <span>Items Ordered ({o.items.reduce((s, i) => s + (i.quantity || 1), 0)})</span>
+                              <span>Total</span>
+                            </div>
+                            <div className="divide-y divide-[#8a61480d]">
+                              {o.items.map((item, idx) => (
+                                <div key={idx} className="py-2 flex items-center justify-between gap-2">
+                                  <div>
+                                    <p className="font-bold text-ink">
+                                      {item.quantity}× {item.name}
+                                    </p>
+                                    <p className="text-[11px] text-[#765442]">
+                                      ₹{item.price} each {item.category ? `· ${item.category}` : ""}
+                                    </p>
+                                  </div>
+                                  <div className="font-black text-clay">
+                                    ₹{item.price * item.quantity}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="pt-2 border-t border-[#8a614815] flex items-center justify-between font-bold text-sm">
+                              <span>Order Total:</span>
+                              <span className="text-base text-clay font-black">₹{o.total}</span>
+                            </div>
+                          </div>
+
+                          {/* 3. Payment Verification & Screenshot View */}
+                          <div className="rounded-2xl bg-white border border-[#8a614815] p-3 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div>
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-[#765442] block mb-1">
+                                Payment Verification
+                              </span>
+                              {o.paymentMethod === "Cashfree Gateway" || (o.screenshot && o.screenshot.startsWith("CASHFREE_")) ? (
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  {o.paymentStatus === "SUCCESS" || o.status === "Order Received" ? (
+                                    <span className="inline-flex items-center gap-1 rounded-xl bg-blue-50 border border-blue-200 px-2.5 py-1 text-xs font-bold text-blue-900">
+                                      ⚡ Cashfree Auto-Verified ✓
+                                    </span>
+                                  ) : (
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="rounded-xl bg-amber-50 border border-amber-200 px-2.5 py-1 text-xs font-semibold text-amber-800">
+                                        ⏳ Cashfree Pending
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => verifyGatewayOrder(o.id)}
+                                        className="rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 px-2.5 py-1 text-xs font-bold"
+                                      >
+                                        🔄 Check Status
+                                      </button>
+                                    </div>
+                                  )}
+                                  {o.transactionId && (
+                                    <span className="text-[10px] font-mono text-[#765442]">
+                                      ID: {o.transactionId}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : o.screenshot ? (
+                                <div className="flex items-center gap-2.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedScreenshotOrder(o)}
+                                    className="inline-flex items-center gap-2 rounded-xl border border-clay/30 bg-[#fff8ed] p-1.5 pr-3 hover:bg-clay hover:text-white transition shadow-2xs group"
+                                  >
+                                    <img
+                                      src={o.screenshot}
+                                      alt="Proof"
+                                      className="h-8 w-8 rounded-lg object-cover"
+                                    />
+                                    <span className="font-bold text-clay group-hover:text-white">
+                                      View Payment Proof ↗
+                                    </span>
+                                  </button>
+                                  <span className="text-[10px] text-[#8a4e1d]">
+                                    ⏱ {getScreenshotExpiryInfo(o.createdAt, o.screenshotExpiresAt).timeLeftText}
+                                  </span>
+                                </div>
+                              ) : o.screenshotExpired || getScreenshotExpiryInfo(o.createdAt, o.screenshotExpiresAt).isExpired ? (
+                                <span className="text-stone-500 bg-stone-100 px-2 py-0.5 rounded text-[11px]">
+                                  Screenshot Purged (3d limit)
+                                </span>
+                              ) : (
+                                <span className="text-stone-500">No screenshot attached</span>
+                              )}
+                            </div>
+
+                            {/* 4. Touch-Friendly Status Updater */}
+                            <div className="w-full sm:w-auto">
+                              <label className="text-[10px] font-bold uppercase tracking-wider text-[#765442] block mb-1">
+                                Update Status
+                              </label>
+                              <select
+                                value={o.status}
+                                onChange={(e) => status(o.id, e.target.value as OrderStatus)}
+                                className={`w-full sm:w-auto rounded-xl border font-bold px-3 py-2 text-xs transition cursor-pointer shadow-2xs ${
+                                  o.status === "Delivered"
+                                    ? "bg-emerald-50 text-emerald-800 border-emerald-300"
+                                    : o.status === "Out for Delivery"
+                                    ? "bg-purple-50 text-purple-800 border-purple-300"
+                                    : o.status === "Preparing"
+                                    ? "bg-amber-50 text-amber-800 border-amber-300"
+                                    : o.status === "Payment Pending"
+                                    ? "bg-orange-50 text-orange-800 border-orange-300"
+                                    : o.status === "Payment Failed"
+                                    ? "bg-rose-50 text-rose-800 border-rose-300"
+                                    : "bg-sky-50 text-sky-800 border-sky-300"
+                                }`}
+                              >
+                                {statuses.map((s) => (
+                                  <option key={s} value={s}>
+                                    {s === "Delivered"
+                                      ? "✓ Delivered"
+                                      : s === "Out for Delivery"
+                                      ? "🚚 Out for Delivery"
+                                      : s === "Preparing"
+                                      ? "🕯️ Preparing"
+                                      : s === "Payment Pending"
+                                      ? "⏳ Payment Pending"
+                                      : s === "Payment Failed"
+                                      ? "✕ Payment Failed"
+                                      : "📋 Order Received"}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
                         </div>
+                      )}
+                    </div>
+                  );
+                })}
 
-                        {p.description && (
-                          <p className="text-xs text-[#765442]/80 line-clamp-2 mt-1.5 leading-relaxed">
-                            {p.description}
-                          </p>
+                {!filteredOrders.length && (
+                  <div className="rounded-3xl border border-[#8a614820] bg-white p-10 text-center text-[#765442]">
+                    <p className="text-2xl mb-1">📦</p>
+                    <p className="font-bold text-ink">No orders found</p>
+                    <p className="text-xs text-[#765442] mt-1">
+                      Try clearing your search query or selecting a different status filter.
+                    </p>
+                    {orderSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setOrderSearchQuery("")}
+                        className="mt-3 rounded-xl bg-ink text-white px-4 py-1.5 text-xs font-semibold"
+                      >
+                        Clear Search
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* Desktop Table View */
+              <div className="overflow-x-auto rounded-3xl border border-[#8a614825] bg-white shadow-sm">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-[#ead8c2]/50 text-xs uppercase tracking-wide text-[#765442]">
+                    <tr>
+                      <th className="p-3.5">Order</th>
+                      <th>Customer</th>
+                      <th>Items</th>
+                      <th>Total</th>
+                      <th>Payment</th>
+                      <th>Status</th>
+                      <th>Date</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#8a614815]">
+                    {paginatedOrders.map((o) => (
+                      <tr key={o.id} className="hover:bg-stone-50/70 transition">
+                        <td className="p-3.5 font-bold font-mono text-clay text-xs">
+                          {o.id}
+                        </td>
+                        <td className="p-3.5">
+                          <p className="font-bold text-ink">{o.customer.name}</p>
+                          <a href={`tel:${o.customer.phone}`} className="text-xs text-clay underline">
+                            {o.customer.phone}
+                          </a>
+                        </td>
+                        <td className="p-3.5 text-xs">
+                          {o.items.map((i, idx) => (
+                            <div key={idx}>
+                              {i.quantity}× {i.name}
+                            </div>
+                          ))}
+                        </td>
+                        <td className="p-3.5 font-black text-clay">₹{o.total}</td>
+                        <td className="p-3.5 text-xs">
+                          {o.paymentMethod === "Cashfree Gateway" || (o.screenshot && o.screenshot.startsWith("CASHFREE_")) ? (
+                            <span className="inline-flex items-center gap-1 rounded-lg bg-blue-50 text-blue-900 border border-blue-200 px-2 py-0.5 font-bold text-[11px]">
+                              ⚡ Cashfree
+                            </span>
+                          ) : o.screenshot ? (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedScreenshotOrder(o)}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-clay/30 bg-[#fff8ed] px-2 py-1 text-[11px] font-bold text-clay hover:bg-clay hover:text-white transition"
+                            >
+                              <img src={o.screenshot} alt="" className="h-4 w-4 rounded object-cover" />
+                              <span>Proof ↗</span>
+                            </button>
+                          ) : (
+                            <span className="text-stone-400">—</span>
+                          )}
+                        </td>
+                        <td className="p-3.5">
+                          <select
+                            value={o.status}
+                            onChange={(e) => status(o.id, e.target.value as OrderStatus)}
+                            className="rounded-xl border border-[#8a614830] px-2.5 py-1 text-xs font-bold"
+                          >
+                            {statuses.map((s) => (
+                              <option key={s} value={s}>
+                                {s}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="p-3.5 text-xs text-[#765442]">
+                          {formatRelativeTime(o.createdAt)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Pagination Controls */}
+            {totalOrderPages > 1 && (
+              <div className="rounded-2xl bg-white border border-[#8a614820] p-3 sm:p-4 flex items-center justify-between gap-2">
+                <p className="text-xs text-[#765442] font-medium">
+                  Page <b className="text-ink">{currentOrderPage}</b> of <b className="text-ink">{totalOrderPages}</b> ({filteredOrders.length} orders)
+                </p>
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    disabled={currentOrderPage <= 1}
+                    onClick={() => setCurrentOrderPage((p) => Math.max(1, p - 1))}
+                    className="rounded-xl border border-[#8a614825] px-3 py-1.5 text-xs font-bold text-[#765442] hover:bg-stone-50 disabled:opacity-40 cursor-pointer active:scale-95"
+                  >
+                    ← Previous
+                  </button>
+
+                  <div className="hidden sm:flex items-center gap-1">
+                    {Array.from({ length: Math.min(5, totalOrderPages) }, (_, i) => {
+                      let pageNum = i + 1;
+                      if (totalOrderPages > 5 && currentOrderPage > 3) {
+                        pageNum = currentOrderPage - 2 + i;
+                        if (pageNum > totalOrderPages) pageNum = totalOrderPages - (4 - i);
+                      }
+                      return (
+                        <button
+                          key={pageNum}
+                          type="button"
+                          onClick={() => setCurrentOrderPage(pageNum)}
+                          className={`h-8 w-8 rounded-xl text-xs font-bold transition ${
+                            currentOrderPage === pageNum
+                              ? "bg-ink text-white"
+                              : "border border-[#8a614820] text-[#765442] hover:bg-stone-50"
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={currentOrderPage >= totalOrderPages}
+                    onClick={() => setCurrentOrderPage((p) => Math.min(totalOrderPages, p + 1))}
+                    className="rounded-xl border border-[#8a614825] px-3 py-1.5 text-xs font-bold text-[#765442] hover:bg-stone-50 disabled:opacity-40 cursor-pointer active:scale-95"
+                  >
+                    Next →
+                  </button>
+                </div>
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* ==================================================== */}
+        {/* TAB 2: PRODUCTS & COLLECTION MANAGEMENT              */}
+        {/* ==================================================== */}
+        {activeTab === "products" && (
+          <section className="space-y-4">
+            {/* Products Action Bar */}
+            <div className="rounded-2xl sm:rounded-3xl bg-white/90 border border-[#8a614825] p-3.5 sm:p-5 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div>
+                <h2 className="display text-xl sm:text-2xl font-bold text-ink flex items-center gap-2">
+                  <span>Candle Collection</span>
+                  <span className="text-xs font-mono font-normal text-[#765442] bg-[#8a614815] px-2.5 py-0.5 rounded-full">
+                    {filteredProducts.length} candles
+                  </span>
+                </h2>
+                <p className="text-xs text-[#765442] mt-0.5">
+                  Manage candle prices, stock availability, specifications, and photography.
+                </p>
+              </div>
+
+              {/* Direct Add Product Button */}
+              <button
+                type="button"
+                onClick={() => setIsAddModalOpen(true)}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-ink hover:bg-clay text-white px-5 py-2.5 text-sm font-bold shadow-sm transition active:scale-95 cursor-pointer shrink-0"
+              >
+                <span className="text-lg leading-none">+</span>
+                <span>Add New Candle</span>
+              </button>
+            </div>
+
+            {/* Product Filters & Search */}
+            <div className="flex flex-col sm:flex-row gap-2.5">
+              <div className="relative flex-1">
+                <span className="absolute left-3.5 top-2.5 text-stone-400 text-sm">🔍</span>
+                <input
+                  type="text"
+                  value={productSearchQuery}
+                  onChange={(e) => setProductSearchQuery(e.target.value)}
+                  placeholder="Search candles by name or scent..."
+                  className="w-full rounded-xl border border-[#8a614830] bg-white pl-9 pr-3 py-2 text-sm text-ink outline-clay shadow-2xs"
+                />
+              </div>
+
+              <select
+                value={productCategoryFilter}
+                onChange={(e) => setProductCategoryFilter(e.target.value)}
+                className="rounded-xl border border-[#8a614830] bg-white px-3 py-2 text-xs font-semibold text-ink outline-clay shadow-2xs cursor-pointer"
+              >
+                {productCategories.map((c) => (
+                  <option key={c} value={c}>
+                    {c === "All" ? "All Categories" : c}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Products Grid */}
+            <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
+              {filteredProducts.map((p) => (
+                <div
+                  key={p.id}
+                  className="rounded-2xl border border-[#8a614820] bg-white p-3.5 sm:p-4 shadow-sm flex flex-col justify-between"
+                >
+                  <div>
+                    {/* Top image + details */}
+                    <div className="flex items-start gap-3">
+                      <div className="relative h-20 w-20 rounded-xl overflow-hidden bg-stone-100 border border-[#8a614815] shrink-0">
+                        <img
+                          src={p.images?.[0] || "/hero-candle.jpg"}
+                          alt={p.name}
+                          className="h-full w-full object-cover"
+                        />
+                        {p.available === false && (
+                          <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-[10px] font-bold text-white uppercase">
+                            Sold Out
+                          </div>
                         )}
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1 flex-wrap">
+                          <span className="font-bold text-ink text-sm sm:text-base truncate">
+                            {p.name}
+                          </span>
+                        </div>
+                        <p className="text-base font-black text-clay mt-0.5">
+                          ₹{p.price}
+                        </p>
+                        <span className="inline-block rounded-md bg-[#8a614815] px-2 py-0.5 text-[10px] font-bold text-clay mt-1">
+                          {p.category}
+                        </span>
                       </div>
                     </div>
 
-                    <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-start gap-2 pt-2 sm:pt-0 border-t border-[#8a614810] sm:border-t-0 shrink-0">
+                    {/* Specification tags */}
+                    <div className="mt-2.5 flex flex-wrap gap-1 text-[10px]">
+                      {p.fragrance && (
+                        <span className="rounded-md bg-[#f4ece3] px-2 py-0.5 text-[#6c4832] font-medium">
+                          🌸 {p.fragrance}
+                        </span>
+                      )}
+                      {p.burnTime && (
+                        <span className="rounded-md bg-[#f4ece3] px-2 py-0.5 text-[#6c4832] font-medium">
+                          ⏳ {p.burnTime}
+                        </span>
+                      )}
+                      {p.wickSize && (
+                        <span className="rounded-md bg-[#f4ece3] px-2 py-0.5 text-[#6c4832] font-medium">
+                          🕯️ {p.wickSize}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Actions footer */}
+                  <div className="mt-3.5 pt-2.5 border-t border-[#8a614815] flex items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => updateProduct(p, { available: !p.available })}
+                      className={`rounded-xl px-3 py-1.5 text-xs font-bold transition active:scale-95 cursor-pointer shadow-2xs ${
+                        p.available !== false
+                          ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                          : "bg-stone-100 text-stone-600 border border-stone-300"
+                      }`}
+                    >
+                      {p.available !== false ? "✓ In Stock" : "✕ Sold Out"}
+                    </button>
+
+                    <div className="flex items-center gap-1.5">
                       <button
                         type="button"
-                        onClick={() => updateProduct(p, { available: !p.available })}
-                        className={`rounded-full px-3 py-1.5 text-xs font-semibold transition active:scale-95 cursor-pointer shadow-2xs ${
-                          p.available
-                            ? "bg-[#e5eedc] text-moss hover:bg-[#d5e4cc]"
-                            : "bg-stone-200 text-stone-600 hover:bg-stone-300"
-                        }`}
+                        onClick={() => startEditingProduct(p)}
+                        className="rounded-xl bg-ink text-white px-3 py-1.5 text-xs font-bold hover:bg-clay transition active:scale-95 shadow-2xs"
                       >
-                        {p.available ? "✓ In stock" : "✕ Sold out"}
+                        Edit
                       </button>
+
                       <button
                         type="button"
                         onClick={() => remove(p.id)}
-                        className="text-xs font-medium text-[#a94d3b] hover:underline p-1 active:scale-95 cursor-pointer"
+                        className="rounded-xl border border-red-200 text-red-700 hover:bg-red-50 px-2.5 py-1.5 text-xs font-semibold transition active:scale-95"
                       >
                         Delete
                       </button>
                     </div>
                   </div>
-
-                  {/* Action buttons: Edit, Photo, etc */}
-                  <div className="mt-3 flex flex-wrap items-center gap-2 pt-2.5 border-t border-[#8a614812]">
-                    <button
-                      type="button"
-                      onClick={() => startEditingProduct(p)}
-                      className="inline-flex items-center gap-1.5 rounded-xl bg-ink text-white px-3.5 py-2 text-xs font-semibold hover:bg-clay transition shadow-2xs cursor-pointer active:scale-95"
-                    >
-                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                      </svg>
-                      <span>Edit Candle</span>
-                    </button>
-
-                    <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-[#8a61483a] bg-[#fff8ed] px-3 py-2 text-xs font-medium text-clay hover:bg-clay hover:text-white transition active:scale-95 shadow-2xs">
-                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                      Change photo
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(e) => {
-                          const f = e.target.files?.[0];
-                          if (f) handleProductImageUpload(p, f, 0);
-                          e.target.value = "";
-                        }}
-                      />
-                    </label>
-
-                    <label className="inline-flex cursor-pointer items-center gap-1 rounded-xl border border-[#8a61482a] bg-white px-2.5 py-2 text-xs text-[#765442] hover:border-clay hover:text-clay transition active:scale-95 shadow-2xs">
-                      + Add photo
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(e) => {
-                          const f = e.target.files?.[0];
-                          if (f) handleProductAddImage(p, f);
-                          e.target.value = "";
-                        }}
-                      />
-                    </label>
-                  </div>
-
-                  {/* Gallery thumbnails for candle if multiple */}
-                  {p.images && p.images.length > 1 && (
-                    <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[#8a61481a] pt-2.5">
-                      <span className="text-[11px] uppercase tracking-wide text-[#765442]">Gallery:</span>
-                      {p.images.map((imgUrl, imgIdx) => (
-                        <div key={imgIdx} className="group relative h-10 w-10 overflow-hidden rounded-lg border border-[#8a61482a]">
-                          <img src={imgUrl} alt="" className="h-full w-full object-cover" />
-                          <button
-                            type="button"
-                            onClick={() => removeProductImage(p, imgIdx)}
-                            className="absolute inset-0 hidden items-center justify-center bg-black/60 text-xs text-white group-hover:flex"
-                            title="Remove image"
-                          >
-                            ×
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
               ))}
             </div>
 
-            {/* Add a candle Form */}
-            <form onSubmit={add} className="mt-6 rounded-3xl border border-dashed border-[#a66a46] bg-[#fffaf2] p-4 sm:p-6 shadow-sm">
-              <h3 className="display text-2xl sm:text-3xl font-bold text-ink">Add a candle</h3>
-              <p className="mt-1 text-xs sm:text-sm text-[#765442]">
-                Create a new candle for your storefront collection.
-              </p>
+            {!filteredProducts.length && (
+              <div className="rounded-3xl border border-[#8a614820] bg-white p-10 text-center text-[#765442]">
+                <p className="text-2xl mb-1">🕯️</p>
+                <p className="font-bold text-ink">No candles found</p>
+                <p className="text-xs text-[#765442] mt-1">
+                  Click &ldquo;Add New Candle&rdquo; to introduce a new handcrafted candle to your collection.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setIsAddModalOpen(true)}
+                  className="mt-3 rounded-xl bg-ink text-white px-4 py-2 text-xs font-bold"
+                >
+                  + Add Candle Now
+                </button>
+              </div>
+            )}
+          </section>
+        )}
 
-              <div className="mt-4 grid gap-3.5 sm:grid-cols-3">
-                <label className="text-xs font-semibold uppercase tracking-wider text-[#765442]">
-                  Candle Name *
-                  <input
-                    required
-                    value={draft.name}
-                    type="text"
-                    placeholder="e.g. Amber & Sandalwood"
-                    onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                    className="mt-1 w-full rounded-xl border border-[#8a614830] bg-white p-3 text-base sm:text-sm text-ink outline-clay shadow-2xs font-medium"
-                  />
-                </label>
-                <label className="text-xs font-semibold uppercase tracking-wider text-[#765442]">
-                  Price (₹ INR) *
-                  <div className="relative mt-1">
-                    <span className="absolute left-3.5 top-3 text-sm font-bold text-[#765442]">₹</span>
+        {/* ==================================================== */}
+        {/* TAB 3: STUDIO SETTINGS & DIAGNOSTICS                 */}
+        {/* ==================================================== */}
+        {activeTab === "settings" && (
+          <section className="space-y-4 max-w-2xl mx-auto">
+            {/* Payment Destination Settings */}
+            <form
+              onSubmit={payment}
+              className="rounded-3xl bg-white p-4 sm:p-6 shadow-sm border border-[#8a614820]"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-xl">💳</span>
+                <h3 className="font-bold text-ink text-base sm:text-lg">
+                  Payment QR Destination
+                </h3>
+              </div>
+              <p className="mt-1 text-xs text-[#765442]">
+                Customer checkout automatically generates instant UPI QR codes linked to this ID.
+              </p>
+              <input
+                value={upi}
+                onChange={(e) => setUpi(e.target.value)}
+                className="mt-3 w-full rounded-xl border border-[#8a614830] p-3 text-sm text-ink outline-clay font-medium"
+                placeholder="e.g. name@upi"
+              />
+              <button
+                type="submit"
+                className="mt-3 rounded-xl bg-ink px-5 py-2.5 text-xs sm:text-sm font-bold text-white hover:bg-clay transition active:scale-95 cursor-pointer shadow-2xs"
+              >
+                Save UPI Destination
+              </button>
+            </form>
+
+            {/* Password Management */}
+            <form
+              onSubmit={password}
+              className="rounded-3xl bg-white p-4 sm:p-6 shadow-sm border border-[#8a614820]"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🔒</span>
+                <h3 className="font-bold text-ink text-base sm:text-lg">
+                  Change Studio Password
+                </h3>
+              </div>
+              <p className="mt-1 text-xs text-[#765442]">
+                Keep your studio dashboard protected.
+              </p>
+              <div className="mt-3 space-y-2.5">
+                <input
+                  name="currentPassword"
+                  type="password"
+                  required
+                  className="w-full rounded-xl border border-[#8a614830] p-3 text-sm text-ink outline-clay"
+                  placeholder="Current password"
+                />
+                <input
+                  name="newPassword"
+                  type="password"
+                  required
+                  minLength={8}
+                  className="w-full rounded-xl border border-[#8a614830] p-3 text-sm text-ink outline-clay"
+                  placeholder="New password (min 8 characters)"
+                />
+              </div>
+              <button
+                type="submit"
+                className="mt-3 rounded-xl bg-ink px-5 py-2.5 text-xs sm:text-sm font-bold text-white hover:bg-clay transition active:scale-95 cursor-pointer shadow-2xs"
+              >
+                Update Password
+              </button>
+            </form>
+
+            {/* Cloud Storage & Sync Diagnostics */}
+            <div className="rounded-3xl bg-white p-4 sm:p-6 shadow-sm border border-[#8a614820]">
+              <div className="flex items-center gap-2">
+                <span className="flex h-2.5 w-2.5 relative">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+                </span>
+                <h3 className="font-bold text-ink text-sm sm:text-base">
+                  Cloud Storage & Auto-Sync
+                </h3>
+              </div>
+              <p className="mt-2 text-xs leading-relaxed text-[#765442]">
+                Customer orders are persisted in <b>Supabase PostgreSQL</b> and payment proof screenshots are saved in the <b>payment-proofs</b> bucket. Real-time updates push directly to this studio dashboard.
+              </p>
+              <div className="mt-3 rounded-xl bg-emerald-50 p-3 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center gap-2">
+                <span>✓ Zero-crash Cloudflare worker architecture active</span>
+              </div>
+            </div>
+          </section>
+        )}
+      </div>
+
+      {/* ==================================================== */}
+      {/* 5. DEDICATED ADD CANDLE MODAL                        */}
+      {/* ==================================================== */}
+      {isAddModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-2 sm:p-4 backdrop-blur-sm overflow-y-auto"
+          onClick={() => setIsAddModalOpen(false)}
+        >
+          <div
+            className="relative flex max-h-[96vh] sm:max-h-[92vh] w-full max-w-2xl flex-col rounded-3xl bg-[#fff8ed] shadow-2xl border border-[#8a61483a] overflow-hidden my-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-[#8a614820] bg-[#f5ede0] px-4 sm:px-6 py-3.5">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🕯️</span>
+                <div>
+                  <h3 className="display text-lg sm:text-xl font-bold text-ink">
+                    Add New Candle
+                  </h3>
+                  <p className="text-[11px] text-[#765442]">
+                    Instantly creates candle in database and displays on storefront.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddModalOpen(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-base font-bold text-[#765442] hover:bg-clay hover:text-white transition shadow-xs"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body Form */}
+            <form onSubmit={add} className="flex flex-col flex-1 overflow-hidden">
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+                {/* Candle Name & Price */}
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-[#765442] mb-1">
+                      Candle Name *
+                    </label>
                     <input
                       required
-                      min="0"
-                      step="1"
-                      value={draft.price}
-                      type="number"
-                      placeholder="e.g. 649"
-                      onChange={(e) => setDraft({ ...draft, price: e.target.value })}
-                      className="w-full rounded-xl border border-[#8a614830] bg-white pl-8 pr-3 py-3 text-base sm:text-sm font-bold text-ink outline-clay shadow-2xs"
+                      value={draft.name}
+                      onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                      placeholder="e.g. Amber & Sandalwood"
+                      className="w-full rounded-xl border border-[#8a614830] bg-white px-3.5 py-2.5 text-sm text-ink outline-clay shadow-2xs font-medium"
                     />
                   </div>
-                </label>
-                <label className="text-xs font-semibold uppercase tracking-wider text-[#765442]">
-                  Category *
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-[#765442] mb-1">
+                      Price (₹ INR) *
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3.5 top-2.5 text-sm font-bold text-[#765442]">₹</span>
+                      <input
+                        required
+                        min="0"
+                        step="1"
+                        type="number"
+                        value={draft.price}
+                        onChange={(e) => setDraft({ ...draft, price: e.target.value })}
+                        placeholder="e.g. 649"
+                        className="w-full rounded-xl border border-[#8a614830] bg-white pl-8 pr-3.5 py-2.5 text-sm font-bold text-ink outline-clay shadow-2xs"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Category */}
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-[#765442] mb-1">
+                    Category *
+                  </label>
                   <select
                     value={draft.category}
                     onChange={(e) => setDraft({ ...draft, category: e.target.value })}
-                    className="mt-1 w-full rounded-xl border border-[#8a614830] bg-white p-3 text-base sm:text-sm text-ink outline-clay shadow-2xs"
+                    className="w-full rounded-xl border border-[#8a614830] bg-white px-3.5 py-2.5 text-sm text-ink outline-clay shadow-2xs cursor-pointer"
                   >
                     <option value="Jar candle">Jar candle</option>
                     <option value="Sculptural">Sculptural</option>
@@ -1616,561 +2425,664 @@ export default function Admin() {
                     <option value="Wax melts">Wax melts</option>
                     <option value="Aromatherapy">Aromatherapy</option>
                   </select>
-                </label>
-              </div>
+                </div>
 
-              {/* Removable / Tickable Specifications Section */}
-              <div className="mt-5 rounded-2xl border border-[#8a614825] bg-[#fff6eb]/60 p-3.5 sm:p-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 border-b border-[#8a614815] pb-2.5 mb-3">
-                  <div>
+                {/* Tickable Specifications */}
+                <div className="rounded-2xl border border-[#8a614825] bg-[#fff6eb]/60 p-3.5 sm:p-4 space-y-3">
+                  <div className="border-b border-[#8a614815] pb-2">
                     <h4 className="text-xs font-bold uppercase tracking-wider text-ink flex items-center gap-1.5">
-                      <span>⚙️</span> Candle Specifications & Details (Tick to Include)
+                      <span>⚙️</span> Specifications (Tick to Include)
                     </h4>
                     <p className="text-[11px] text-[#765442] mt-0.5">
-                      Tick to include a detail for this candle. If ticked, it <b>must be filled</b>. If unticked, you cannot write in it and it won&apos;t appear on the store.
+                      Tick a detail to include it on the store page. If ticked, it <b>must be filled</b>.
                     </p>
+                  </div>
+
+                  <div className="grid gap-2.5 sm:grid-cols-2">
+                    {/* Wick Size */}
+                    <div className={`rounded-xl border p-2.5 transition ${draftSpecsEnabled.wickSize ? "border-emerald-300 bg-white" : "border-stone-200 bg-stone-100/70"}`}>
+                      <label className="flex items-center justify-between cursor-pointer py-0.5">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={draftSpecsEnabled.wickSize}
+                            onChange={(e) => setDraftSpecsEnabled((p) => ({ ...p, wickSize: e.target.checked }))}
+                            className="h-4 w-4 rounded accent-[#9b4a1b]"
+                          />
+                          <span className="text-xs font-bold text-ink">🕯️ Wick Size</span>
+                        </div>
+                        <span className={`text-[10px] font-bold ${draftSpecsEnabled.wickSize ? "text-emerald-700" : "text-stone-500"}`}>
+                          {draftSpecsEnabled.wickSize ? "✓ Ticked" : "Excluded"}
+                        </span>
+                      </label>
+                      <input
+                        type="text"
+                        disabled={!draftSpecsEnabled.wickSize}
+                        value={draftSpecsEnabled.wickSize ? draft.wickSize : ""}
+                        onChange={(e) => setDraft({ ...draft, wickSize: e.target.value })}
+                        placeholder="e.g. 24-ply braided cotton wick"
+                        className="mt-1.5 w-full rounded-lg border border-[#8a614830] px-2.5 py-1.5 text-xs disabled:bg-stone-100 disabled:opacity-50"
+                      />
+                    </div>
+
+                    {/* Dimensions */}
+                    <div className={`rounded-xl border p-2.5 transition ${draftSpecsEnabled.candleDimensions ? "border-emerald-300 bg-white" : "border-stone-200 bg-stone-100/70"}`}>
+                      <label className="flex items-center justify-between cursor-pointer py-0.5">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={draftSpecsEnabled.candleDimensions}
+                            onChange={(e) => setDraftSpecsEnabled((p) => ({ ...p, candleDimensions: e.target.checked }))}
+                            className="h-4 w-4 rounded accent-[#9b4a1b]"
+                          />
+                          <span className="text-xs font-bold text-ink">📏 Dimensions</span>
+                        </div>
+                        <span className={`text-[10px] font-bold ${draftSpecsEnabled.candleDimensions ? "text-emerald-700" : "text-stone-500"}`}>
+                          {draftSpecsEnabled.candleDimensions ? "✓ Ticked" : "Excluded"}
+                        </span>
+                      </label>
+                      <input
+                        type="text"
+                        disabled={!draftSpecsEnabled.candleDimensions}
+                        value={draftSpecsEnabled.candleDimensions ? draft.candleDimensions : ""}
+                        onChange={(e) => setDraft({ ...draft, candleDimensions: e.target.value })}
+                        placeholder="e.g. 7.5 cm × 9 cm"
+                        className="mt-1.5 w-full rounded-lg border border-[#8a614830] px-2.5 py-1.5 text-xs disabled:bg-stone-100 disabled:opacity-50"
+                      />
+                    </div>
+
+                    {/* Fragrance */}
+                    <div className={`rounded-xl border p-2.5 transition ${draftSpecsEnabled.fragrance ? "border-emerald-300 bg-white" : "border-stone-200 bg-stone-100/70"}`}>
+                      <label className="flex items-center justify-between cursor-pointer py-0.5">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={draftSpecsEnabled.fragrance}
+                            onChange={(e) => setDraftSpecsEnabled((p) => ({ ...p, fragrance: e.target.checked }))}
+                            className="h-4 w-4 rounded accent-[#9b4a1b]"
+                          />
+                          <span className="text-xs font-bold text-ink">🌸 Fragrance</span>
+                        </div>
+                        <span className={`text-[10px] font-bold ${draftSpecsEnabled.fragrance ? "text-emerald-700" : "text-stone-500"}`}>
+                          {draftSpecsEnabled.fragrance ? "✓ Ticked" : "Excluded"}
+                        </span>
+                      </label>
+                      <input
+                        type="text"
+                        disabled={!draftSpecsEnabled.fragrance}
+                        value={draftSpecsEnabled.fragrance ? draft.fragrance : ""}
+                        onChange={(e) => setDraft({ ...draft, fragrance: e.target.value })}
+                        placeholder="e.g. French Vanilla & Amber"
+                        className="mt-1.5 w-full rounded-lg border border-[#8a614830] px-2.5 py-1.5 text-xs disabled:bg-stone-100 disabled:opacity-50"
+                      />
+                    </div>
+
+                    {/* Burn Time */}
+                    <div className={`rounded-xl border p-2.5 transition ${draftSpecsEnabled.burnTime ? "border-emerald-300 bg-white" : "border-stone-200 bg-stone-100/70"}`}>
+                      <label className="flex items-center justify-between cursor-pointer py-0.5">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={draftSpecsEnabled.burnTime}
+                            onChange={(e) => setDraftSpecsEnabled((p) => ({ ...p, burnTime: e.target.checked }))}
+                            className="h-4 w-4 rounded accent-[#9b4a1b]"
+                          />
+                          <span className="text-xs font-bold text-ink">⏳ Burn Time</span>
+                        </div>
+                        <span className={`text-[10px] font-bold ${draftSpecsEnabled.burnTime ? "text-emerald-700" : "text-stone-500"}`}>
+                          {draftSpecsEnabled.burnTime ? "✓ Ticked" : "Excluded"}
+                        </span>
+                      </label>
+                      <input
+                        type="text"
+                        disabled={!draftSpecsEnabled.burnTime}
+                        value={draftSpecsEnabled.burnTime ? draft.burnTime : ""}
+                        onChange={(e) => setDraft({ ...draft, burnTime: e.target.value })}
+                        placeholder="e.g. 35–40 hours"
+                        className="mt-1.5 w-full rounded-lg border border-[#8a614830] px-2.5 py-1.5 text-xs disabled:bg-stone-100 disabled:opacity-50"
+                      />
+                    </div>
+
+                    {/* Ingredients */}
+                    <div className={`rounded-xl border p-2.5 transition ${draftSpecsEnabled.ingredients ? "border-emerald-300 bg-white" : "border-stone-200 bg-stone-100/70"}`}>
+                      <label className="flex items-center justify-between cursor-pointer py-0.5">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={draftSpecsEnabled.ingredients}
+                            onChange={(e) => setDraftSpecsEnabled((p) => ({ ...p, ingredients: e.target.checked }))}
+                            className="h-4 w-4 rounded accent-[#9b4a1b]"
+                          />
+                          <span className="text-xs font-bold text-ink">🌿 Ingredients</span>
+                        </div>
+                        <span className={`text-[10px] font-bold ${draftSpecsEnabled.ingredients ? "text-emerald-700" : "text-stone-500"}`}>
+                          {draftSpecsEnabled.ingredients ? "✓ Ticked" : "Excluded"}
+                        </span>
+                      </label>
+                      <input
+                        type="text"
+                        disabled={!draftSpecsEnabled.ingredients}
+                        value={draftSpecsEnabled.ingredients ? draft.ingredients : ""}
+                        onChange={(e) => setDraft({ ...draft, ingredients: e.target.value })}
+                        placeholder="e.g. 100% Pure Soy Wax"
+                        className="mt-1.5 w-full rounded-lg border border-[#8a614830] px-2.5 py-1.5 text-xs disabled:bg-stone-100 disabled:opacity-50"
+                      />
+                    </div>
+
+                    {/* Description */}
+                    <div className={`rounded-xl border p-2.5 transition ${draftSpecsEnabled.description ? "border-emerald-300 bg-white" : "border-stone-200 bg-stone-100/70"}`}>
+                      <label className="flex items-center justify-between cursor-pointer py-0.5">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={draftSpecsEnabled.description}
+                            onChange={(e) => setDraftSpecsEnabled((p) => ({ ...p, description: e.target.checked }))}
+                            className="h-4 w-4 rounded accent-[#9b4a1b]"
+                          />
+                          <span className="text-xs font-bold text-ink">📝 Description</span>
+                        </div>
+                        <span className={`text-[10px] font-bold ${draftSpecsEnabled.description ? "text-emerald-700" : "text-stone-500"}`}>
+                          {draftSpecsEnabled.description ? "✓ Ticked" : "Excluded"}
+                        </span>
+                      </label>
+                      <input
+                        type="text"
+                        disabled={!draftSpecsEnabled.description}
+                        value={draftSpecsEnabled.description ? draft.description : ""}
+                        onChange={(e) => setDraft({ ...draft, description: e.target.value })}
+                        placeholder="e.g. Handcrafted with warm cozy notes"
+                        className="mt-1.5 w-full rounded-lg border border-[#8a614830] px-2.5 py-1.5 text-xs disabled:bg-stone-100 disabled:opacity-50"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Photos Upload Section */}
+                <div className="rounded-2xl border border-[#8a614825] bg-white p-3.5 sm:p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-ink">
+                        Product Photos *
+                      </h4>
+                      <p className="text-[11px] text-[#765442]">
+                        Upload images directly from your phone/camera or enter URLs.
+                      </p>
+                    </div>
+
+                    <label className="inline-flex items-center gap-1.5 rounded-xl bg-ink text-white px-3 py-1.5 text-xs font-bold hover:bg-clay transition cursor-pointer active:scale-95 shadow-2xs">
+                      <span>📷 Upload Photo</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        className="hidden"
+                        onChange={handleDraftFiles}
+                        disabled={isProcessingPhoto}
+                      />
+                    </label>
+                  </div>
+
+                  {/* Uploaded thumbnails */}
+                  {uploadedPhotos.length > 0 && (
+                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 pt-1">
+                      {uploadedPhotos.map((url, idx) => (
+                        <div key={idx} className="relative group rounded-xl overflow-hidden border border-[#8a614820] aspect-square">
+                          <img src={url} alt="" className="h-full w-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => removeUploadedPhoto(idx)}
+                            className="absolute top-1 right-1 h-6 w-6 rounded-full bg-red-600 text-white text-xs font-bold flex items-center justify-center hover:bg-red-700"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* URL fallback */}
+                  <textarea
+                    rows={2}
+                    value={draft.images}
+                    onChange={(e) => setDraft({ ...draft, images: e.target.value })}
+                    placeholder="Or paste image URLs (one per line)..."
+                    className="w-full rounded-xl border border-[#8a614830] p-2.5 text-xs text-ink outline-clay"
+                  />
+                </div>
+              </div>
+
+              {/* Modal Footer Controls */}
+              <div className="flex items-center justify-between gap-3 border-t border-[#8a614820] bg-[#f5ede0] px-4 sm:px-6 py-3">
+                <button
+                  type="button"
+                  onClick={() => setIsAddModalOpen(false)}
+                  className="rounded-xl border border-[#8a614830] bg-white px-4 py-2 text-xs sm:text-sm font-bold text-[#765442] hover:bg-stone-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isProcessingPhoto || isSubmittingProduct}
+                  className="rounded-xl bg-ink hover:bg-clay text-white px-6 py-2.5 text-xs sm:text-sm font-bold shadow-md transition active:scale-95 disabled:opacity-50"
+                >
+                  {isSubmittingProduct ? "Adding Candle..." : "+ Add Candle to Store"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ==================================================== */}
+      {/* 6. PRODUCT EDIT MODAL                                */}
+      {/* ==================================================== */}
+      {editingProduct && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-2 sm:p-4 backdrop-blur-sm overflow-y-auto"
+          onClick={closeEditingProduct}
+        >
+          <div
+            className="relative flex max-h-[96vh] sm:max-h-[92vh] w-full max-w-2xl flex-col rounded-3xl bg-[#fff8ed] shadow-2xl border border-[#8a61483a] overflow-hidden my-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-[#8a614820] bg-[#f5ede0] px-4 sm:px-6 py-3.5">
+              <div>
+                <h3 className="display text-lg sm:text-xl font-bold text-ink">
+                  Edit Candle: {editingProduct.name}
+                </h3>
+                <p className="text-[11px] text-[#765442]">
+                  Changes save directly to cloud database & update storefront.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeEditingProduct}
+                disabled={isSavingProduct}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-base font-bold text-[#765442] hover:bg-clay hover:text-white transition shadow-xs"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={saveEditedProduct} className="flex flex-col flex-1 overflow-hidden">
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-[#765442] mb-1">
+                      Candle Name *
+                    </label>
+                    <input
+                      required
+                      value={editForm.name}
+                      onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                      className="w-full rounded-xl border border-[#8a614830] bg-white px-3.5 py-2.5 text-sm font-medium text-ink outline-clay shadow-2xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-[#765442] mb-1">
+                      Price (₹ INR) *
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3.5 top-2.5 text-sm font-bold text-[#765442]">₹</span>
+                      <input
+                        required
+                        min="0"
+                        step="1"
+                        type="number"
+                        value={editForm.price}
+                        onChange={(e) => setEditForm({ ...editForm, price: e.target.value })}
+                        className="w-full rounded-xl border border-[#8a614830] bg-white pl-8 pr-3.5 py-2.5 text-sm font-bold text-ink outline-clay shadow-2xs"
+                      />
+                    </div>
                   </div>
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-2">
-                  {/* 1. Wick Size (Wink size) */}
-                  <div
-                    className={`rounded-xl border p-3 transition-all ${
-                      draftSpecsEnabled.wickSize
-                        ? "border-emerald-300 bg-white shadow-2xs"
-                        : "border-stone-200 bg-stone-100/70"
-                    }`}
-                  >
-                    <label className="flex items-center justify-between cursor-pointer select-none py-0.5">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={draftSpecsEnabled.wickSize}
-                          onChange={(e) =>
-                            setDraftSpecsEnabled((p) => ({ ...p, wickSize: e.target.checked }))
-                          }
-                          className="h-4 w-4 rounded accent-[#9b4a1b] cursor-pointer"
-                        />
-                        <span className="text-xs font-bold text-ink flex items-center gap-1.5">
-                          <span>🕯️</span> Wick Size <span className="text-[10px] font-normal text-[#765442]">(Wink size)</span>
-                        </span>
-                      </div>
-                      {draftSpecsEnabled.wickSize ? (
-                        <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                          ✓ Ticked (Must fill)
-                        </span>
-                      ) : (
-                        <span className="rounded-md bg-stone-200 px-2 py-0.5 text-[10px] font-medium text-stone-600">
-                          ✕ Unticked (Excluded)
-                        </span>
-                      )}
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-[#765442] mb-1">
+                      Category
                     </label>
-                    <div className="mt-2">
-                      <input
-                        type="text"
-                        disabled={!draftSpecsEnabled.wickSize}
-                        required={draftSpecsEnabled.wickSize}
-                        value={draftSpecsEnabled.wickSize ? draft.wickSize : ""}
-                        onChange={(e) => setDraft({ ...draft, wickSize: e.target.value })}
-                        placeholder={
-                          draftSpecsEnabled.wickSize
-                            ? "e.g. 24-ply braided cotton wick or Double wood wick (Required)"
-                            : "✕ Unticked - You cannot write here"
-                        }
-                        className={`w-full rounded-lg px-3 py-2.5 text-base sm:text-sm transition-all ${
-                          draftSpecsEnabled.wickSize
-                            ? "border border-[#8a614830] bg-white text-ink outline-clay"
-                            : "border border-dashed border-stone-300 bg-stone-100/90 text-stone-400 cursor-not-allowed select-none"
-                        }`}
-                      />
-                    </div>
+                    <select
+                      value={editForm.category}
+                      onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
+                      className="w-full rounded-xl border border-[#8a614830] bg-white px-3.5 py-2.5 text-sm text-ink outline-clay shadow-2xs"
+                    >
+                      <option value="Jar candle">Jar candle</option>
+                      <option value="Sculptural">Sculptural</option>
+                      <option value="Flower candle">Flower candle</option>
+                      <option value="Tin candle">Tin candle</option>
+                      <option value="Wax melts">Wax melts</option>
+                      <option value="Aromatherapy">Aromatherapy</option>
+                    </select>
                   </div>
 
-                  {/* 2. Candle Length & Breadth (Dimensions) */}
-                  <div
-                    className={`rounded-xl border p-3 transition-all ${
-                      draftSpecsEnabled.candleDimensions
-                        ? "border-emerald-300 bg-white shadow-2xs"
-                        : "border-stone-200 bg-stone-100/70"
-                    }`}
-                  >
-                    <label className="flex items-center justify-between cursor-pointer select-none py-0.5">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={draftSpecsEnabled.candleDimensions}
-                          onChange={(e) =>
-                            setDraftSpecsEnabled((p) => ({ ...p, candleDimensions: e.target.checked }))
-                          }
-                          className="h-4 w-4 rounded accent-[#9b4a1b] cursor-pointer"
-                        />
-                        <span className="text-xs font-bold text-ink flex items-center gap-1.5">
-                          <span>📏</span> Candle Length & Breadth <span className="text-[10px] font-normal text-[#765442]">(Dimensions)</span>
-                        </span>
-                      </div>
-                      {draftSpecsEnabled.candleDimensions ? (
-                        <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                          ✓ Ticked (Must fill)
-                        </span>
-                      ) : (
-                        <span className="rounded-md bg-stone-200 px-2 py-0.5 text-[10px] font-medium text-stone-600">
-                          ✕ Unticked (Excluded)
-                        </span>
-                      )}
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-[#765442] mb-1">
+                      Availability
                     </label>
-                    <div className="mt-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditForm({ ...editForm, available: !editForm.available })}
+                      className={`w-full rounded-xl border px-3.5 py-2.5 text-sm font-bold transition flex items-center justify-between shadow-2xs ${
+                        editForm.available
+                          ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                          : "border-stone-300 bg-stone-100 text-stone-600"
+                      }`}
+                    >
+                      <span>{editForm.available ? "✓ In Stock" : "✕ Sold Out"}</span>
+                      <span className="text-xs underline opacity-75">Click to Toggle</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Edit Specifications */}
+                <div className="rounded-2xl border border-[#8a614825] bg-[#fff6eb]/60 p-3.5 sm:p-4 space-y-3">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-ink border-b border-[#8a614815] pb-2">
+                    Specifications (Tick to Include)
+                  </h4>
+
+                  <div className="grid gap-2.5 sm:grid-cols-2">
+                    <div className={`rounded-xl border p-2.5 ${editSpecsEnabled.wickSize ? "border-emerald-300 bg-white" : "border-stone-200 bg-stone-100/70"}`}>
+                      <label className="flex items-center justify-between cursor-pointer py-0.5">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={editSpecsEnabled.wickSize}
+                            onChange={(e) => setEditSpecsEnabled((p) => ({ ...p, wickSize: e.target.checked }))}
+                            className="h-4 w-4 rounded accent-[#9b4a1b]"
+                          />
+                          <span className="text-xs font-bold text-ink">🕯️ Wick Size</span>
+                        </div>
+                        <span className={`text-[10px] font-bold ${editSpecsEnabled.wickSize ? "text-emerald-700" : "text-stone-500"}`}>
+                          {editSpecsEnabled.wickSize ? "✓ Ticked" : "Excluded"}
+                        </span>
+                      </label>
                       <input
                         type="text"
-                        disabled={!draftSpecsEnabled.candleDimensions}
-                        required={draftSpecsEnabled.candleDimensions}
-                        value={draftSpecsEnabled.candleDimensions ? draft.candleDimensions : ""}
-                        onChange={(e) => setDraft({ ...draft, candleDimensions: e.target.value })}
-                        placeholder={
-                          draftSpecsEnabled.candleDimensions
-                            ? "e.g. 7.5 cm (L) × 7.5 cm (B) × 9 cm (H) (Required)"
-                            : "✕ Unticked - You cannot write here"
-                        }
-                        className={`w-full rounded-lg px-3 py-2.5 text-base sm:text-sm transition-all ${
-                          draftSpecsEnabled.candleDimensions
-                            ? "border border-[#8a614830] bg-white text-ink outline-clay"
-                            : "border border-dashed border-stone-300 bg-stone-100/90 text-stone-400 cursor-not-allowed select-none"
-                        }`}
+                        disabled={!editSpecsEnabled.wickSize}
+                        value={editSpecsEnabled.wickSize ? editForm.wickSize : ""}
+                        onChange={(e) => setEditForm({ ...editForm, wickSize: e.target.value })}
+                        placeholder="e.g. 24-ply braided cotton wick"
+                        className="mt-1.5 w-full rounded-lg border border-[#8a614830] px-2.5 py-1.5 text-xs disabled:bg-stone-100 disabled:opacity-50"
                       />
                     </div>
-                  </div>
 
-                  {/* 3. Fragrance */}
-                  <div
-                    className={`rounded-xl border p-3 transition-all ${
-                      draftSpecsEnabled.fragrance
-                        ? "border-emerald-300 bg-white shadow-2xs"
-                        : "border-stone-200 bg-stone-100/70"
-                    }`}
-                  >
-                    <label className="flex items-center justify-between cursor-pointer select-none py-0.5">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={draftSpecsEnabled.fragrance}
-                          onChange={(e) =>
-                            setDraftSpecsEnabled((p) => ({ ...p, fragrance: e.target.checked }))
-                          }
-                          className="h-4 w-4 rounded accent-[#9b4a1b] cursor-pointer"
-                        />
-                        <span className="text-xs font-bold text-ink flex items-center gap-1.5">
-                          <span>🌸</span> Fragrance <span className="text-[10px] font-normal text-[#765442]">(Scent notes)</span>
+                    <div className={`rounded-xl border p-2.5 ${editSpecsEnabled.candleDimensions ? "border-emerald-300 bg-white" : "border-stone-200 bg-stone-100/70"}`}>
+                      <label className="flex items-center justify-between cursor-pointer py-0.5">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={editSpecsEnabled.candleDimensions}
+                            onChange={(e) => setEditSpecsEnabled((p) => ({ ...p, candleDimensions: e.target.checked }))}
+                            className="h-4 w-4 rounded accent-[#9b4a1b]"
+                          />
+                          <span className="text-xs font-bold text-ink">📏 Dimensions</span>
+                        </div>
+                        <span className={`text-[10px] font-bold ${editSpecsEnabled.candleDimensions ? "text-emerald-700" : "text-stone-500"}`}>
+                          {editSpecsEnabled.candleDimensions ? "✓ Ticked" : "Excluded"}
                         </span>
-                      </div>
-                      {draftSpecsEnabled.fragrance ? (
-                        <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                          ✓ Ticked (Must fill)
-                        </span>
-                      ) : (
-                        <span className="rounded-md bg-stone-200 px-2 py-0.5 text-[10px] font-medium text-stone-600">
-                          ✕ Unticked (Excluded)
-                        </span>
-                      )}
-                    </label>
-                    <div className="mt-2">
+                      </label>
                       <input
                         type="text"
-                        disabled={!draftSpecsEnabled.fragrance}
-                        required={draftSpecsEnabled.fragrance}
-                        value={draftSpecsEnabled.fragrance ? draft.fragrance : ""}
-                        onChange={(e) => setDraft({ ...draft, fragrance: e.target.value })}
-                        placeholder={
-                          draftSpecsEnabled.fragrance
-                            ? "e.g. French Vanilla, Lavender & Sandalwood (Required)"
-                            : "✕ Unticked - You cannot write here"
-                        }
-                        className={`w-full rounded-lg px-3 py-2.5 text-base sm:text-sm transition-all ${
-                          draftSpecsEnabled.fragrance
-                            ? "border border-[#8a614830] bg-white text-ink outline-clay"
-                            : "border border-dashed border-stone-300 bg-stone-100/90 text-stone-400 cursor-not-allowed select-none"
-                        }`}
+                        disabled={!editSpecsEnabled.candleDimensions}
+                        value={editSpecsEnabled.candleDimensions ? editForm.candleDimensions : ""}
+                        onChange={(e) => setEditForm({ ...editForm, candleDimensions: e.target.value })}
+                        placeholder="e.g. 7.5 cm × 9 cm"
+                        className="mt-1.5 w-full rounded-lg border border-[#8a614830] px-2.5 py-1.5 text-xs disabled:bg-stone-100 disabled:opacity-50"
                       />
                     </div>
-                  </div>
 
-                  {/* 4. Burn Time */}
-                  <div
-                    className={`rounded-xl border p-3 transition-all ${
-                      draftSpecsEnabled.burnTime
-                        ? "border-emerald-300 bg-white shadow-2xs"
-                        : "border-stone-200 bg-stone-100/70"
-                    }`}
-                  >
-                    <label className="flex items-center justify-between cursor-pointer select-none py-0.5">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={draftSpecsEnabled.burnTime}
-                          onChange={(e) =>
-                            setDraftSpecsEnabled((p) => ({ ...p, burnTime: e.target.checked }))
-                          }
-                          className="h-4 w-4 rounded accent-[#9b4a1b] cursor-pointer"
-                        />
-                        <span className="text-xs font-bold text-ink flex items-center gap-1.5">
-                          <span>⏳</span> Burn Time <span className="text-[10px] font-normal text-[#765442]">(Hours)</span>
+                    <div className={`rounded-xl border p-2.5 ${editSpecsEnabled.fragrance ? "border-emerald-300 bg-white" : "border-stone-200 bg-stone-100/70"}`}>
+                      <label className="flex items-center justify-between cursor-pointer py-0.5">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={editSpecsEnabled.fragrance}
+                            onChange={(e) => setEditSpecsEnabled((p) => ({ ...p, fragrance: e.target.checked }))}
+                            className="h-4 w-4 rounded accent-[#9b4a1b]"
+                          />
+                          <span className="text-xs font-bold text-ink">🌸 Fragrance</span>
+                        </div>
+                        <span className={`text-[10px] font-bold ${editSpecsEnabled.fragrance ? "text-emerald-700" : "text-stone-500"}`}>
+                          {editSpecsEnabled.fragrance ? "✓ Ticked" : "Excluded"}
                         </span>
-                      </div>
-                      {draftSpecsEnabled.burnTime ? (
-                        <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                          ✓ Ticked (Must fill)
-                        </span>
-                      ) : (
-                        <span className="rounded-md bg-stone-200 px-2 py-0.5 text-[10px] font-medium text-stone-600">
-                          ✕ Unticked (Excluded)
-                        </span>
-                      )}
-                    </label>
-                    <div className="mt-2">
+                      </label>
                       <input
                         type="text"
-                        disabled={!draftSpecsEnabled.burnTime}
-                        required={draftSpecsEnabled.burnTime}
-                        value={draftSpecsEnabled.burnTime ? draft.burnTime : ""}
-                        onChange={(e) => setDraft({ ...draft, burnTime: e.target.value })}
-                        placeholder={
-                          draftSpecsEnabled.burnTime
-                            ? "e.g. 35–40 hours (Required)"
-                            : "✕ Unticked - You cannot write here"
-                        }
-                        className={`w-full rounded-lg px-3 py-2.5 text-base sm:text-sm transition-all ${
-                          draftSpecsEnabled.burnTime
-                            ? "border border-[#8a614830] bg-white text-ink outline-clay"
-                            : "border border-dashed border-stone-300 bg-stone-100/90 text-stone-400 cursor-not-allowed select-none"
-                        }`}
+                        disabled={!editSpecsEnabled.fragrance}
+                        value={editSpecsEnabled.fragrance ? editForm.fragrance : ""}
+                        onChange={(e) => setEditForm({ ...editForm, fragrance: e.target.value })}
+                        placeholder="e.g. French Vanilla & Amber"
+                        className="mt-1.5 w-full rounded-lg border border-[#8a614830] px-2.5 py-1.5 text-xs disabled:bg-stone-100 disabled:opacity-50"
                       />
                     </div>
-                  </div>
 
-                  {/* 5. Ingredients */}
-                  <div
-                    className={`rounded-xl border p-3 transition-all ${
-                      draftSpecsEnabled.ingredients
-                        ? "border-emerald-300 bg-white shadow-2xs"
-                        : "border-stone-200 bg-stone-100/70"
-                    }`}
-                  >
-                    <label className="flex items-center justify-between cursor-pointer select-none py-0.5">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={draftSpecsEnabled.ingredients}
-                          onChange={(e) =>
-                            setDraftSpecsEnabled((p) => ({ ...p, ingredients: e.target.checked }))
-                          }
-                          className="h-4 w-4 rounded accent-[#9b4a1b] cursor-pointer"
-                        />
-                        <span className="text-xs font-bold text-ink flex items-center gap-1.5">
-                          <span>🌿</span> Ingredients <span className="text-[10px] font-normal text-[#765442]">(Made with)</span>
+                    <div className={`rounded-xl border p-2.5 ${editSpecsEnabled.burnTime ? "border-emerald-300 bg-white" : "border-stone-200 bg-stone-100/70"}`}>
+                      <label className="flex items-center justify-between cursor-pointer py-0.5">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={editSpecsEnabled.burnTime}
+                            onChange={(e) => setEditSpecsEnabled((p) => ({ ...p, burnTime: e.target.checked }))}
+                            className="h-4 w-4 rounded accent-[#9b4a1b]"
+                          />
+                          <span className="text-xs font-bold text-ink">⏳ Burn Time</span>
+                        </div>
+                        <span className={`text-[10px] font-bold ${editSpecsEnabled.burnTime ? "text-emerald-700" : "text-stone-500"}`}>
+                          {editSpecsEnabled.burnTime ? "✓ Ticked" : "Excluded"}
                         </span>
-                      </div>
-                      {draftSpecsEnabled.ingredients ? (
-                        <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                          ✓ Ticked (Must fill)
-                        </span>
-                      ) : (
-                        <span className="rounded-md bg-stone-200 px-2 py-0.5 text-[10px] font-medium text-stone-600">
-                          ✕ Unticked (Excluded)
-                        </span>
-                      )}
-                    </label>
-                    <div className="mt-2">
+                      </label>
                       <input
                         type="text"
-                        disabled={!draftSpecsEnabled.ingredients}
-                        required={draftSpecsEnabled.ingredients}
-                        value={draftSpecsEnabled.ingredients ? draft.ingredients : ""}
-                        onChange={(e) => setDraft({ ...draft, ingredients: e.target.value })}
-                        placeholder={
-                          draftSpecsEnabled.ingredients
-                            ? "e.g. 100% Pure Soy Wax, Organic Essential Oils (Required)"
-                            : "✕ Unticked - You cannot write here"
-                        }
-                        className={`w-full rounded-lg px-3 py-2.5 text-base sm:text-sm transition-all ${
-                          draftSpecsEnabled.ingredients
-                            ? "border border-[#8a614830] bg-white text-ink outline-clay"
-                            : "border border-dashed border-stone-300 bg-stone-100/90 text-stone-400 cursor-not-allowed select-none"
-                        }`}
+                        disabled={!editSpecsEnabled.burnTime}
+                        value={editSpecsEnabled.burnTime ? editForm.burnTime : ""}
+                        onChange={(e) => setEditForm({ ...editForm, burnTime: e.target.value })}
+                        placeholder="e.g. 35–40 hours"
+                        className="mt-1.5 w-full rounded-lg border border-[#8a614830] px-2.5 py-1.5 text-xs disabled:bg-stone-100 disabled:opacity-50"
                       />
                     </div>
-                  </div>
 
-                  {/* 6. Description */}
-                  <div
-                    className={`rounded-xl border p-3 transition-all ${
-                      draftSpecsEnabled.description
-                        ? "border-emerald-300 bg-white shadow-2xs"
-                        : "border-stone-200 bg-stone-100/70"
-                    }`}
-                  >
-                    <label className="flex items-center justify-between cursor-pointer select-none py-0.5">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={draftSpecsEnabled.description}
-                          onChange={(e) =>
-                            setDraftSpecsEnabled((p) => ({ ...p, description: e.target.checked }))
-                          }
-                          className="h-4 w-4 rounded accent-[#9b4a1b] cursor-pointer"
-                        />
-                        <span className="text-xs font-bold text-ink flex items-center gap-1.5">
-                          <span>📝</span> Description & Story <span className="text-[10px] font-normal text-[#765442]">(Scent & mood)</span>
+                    <div className={`rounded-xl border p-2.5 ${editSpecsEnabled.ingredients ? "border-emerald-300 bg-white" : "border-stone-200 bg-stone-100/70"}`}>
+                      <label className="flex items-center justify-between cursor-pointer py-0.5">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={editSpecsEnabled.ingredients}
+                            onChange={(e) => setEditSpecsEnabled((p) => ({ ...p, ingredients: e.target.checked }))}
+                            className="h-4 w-4 rounded accent-[#9b4a1b]"
+                          />
+                          <span className="text-xs font-bold text-ink">🌿 Ingredients</span>
+                        </div>
+                        <span className={`text-[10px] font-bold ${editSpecsEnabled.ingredients ? "text-emerald-700" : "text-stone-500"}`}>
+                          {editSpecsEnabled.ingredients ? "✓ Ticked" : "Excluded"}
                         </span>
-                      </div>
-                      {draftSpecsEnabled.description ? (
-                        <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                          ✓ Ticked (Must fill)
+                      </label>
+                      <input
+                        type="text"
+                        disabled={!editSpecsEnabled.ingredients}
+                        value={editSpecsEnabled.ingredients ? editForm.ingredients : ""}
+                        onChange={(e) => setEditForm({ ...editForm, ingredients: e.target.value })}
+                        placeholder="e.g. 100% Pure Soy Wax"
+                        className="mt-1.5 w-full rounded-lg border border-[#8a614830] px-2.5 py-1.5 text-xs disabled:bg-stone-100 disabled:opacity-50"
+                      />
+                    </div>
+
+                    <div className={`rounded-xl border p-2.5 ${editSpecsEnabled.description ? "border-emerald-300 bg-white" : "border-stone-200 bg-stone-100/70"}`}>
+                      <label className="flex items-center justify-between cursor-pointer py-0.5">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={editSpecsEnabled.description}
+                            onChange={(e) => setEditSpecsEnabled((p) => ({ ...p, description: e.target.checked }))}
+                            className="h-4 w-4 rounded accent-[#9b4a1b]"
+                          />
+                          <span className="text-xs font-bold text-ink">📝 Description</span>
+                        </div>
+                        <span className={`text-[10px] font-bold ${editSpecsEnabled.description ? "text-emerald-700" : "text-stone-500"}`}>
+                          {editSpecsEnabled.description ? "✓ Ticked" : "Excluded"}
                         </span>
-                      ) : (
-                        <span className="rounded-md bg-stone-200 px-2 py-0.5 text-[10px] font-medium text-stone-600">
-                          ✕ Unticked (Excluded)
-                        </span>
-                      )}
-                    </label>
-                    <div className="mt-2">
-                      <textarea
-                        rows={2}
-                        disabled={!draftSpecsEnabled.description}
-                        required={draftSpecsEnabled.description}
-                        value={draftSpecsEnabled.description ? draft.description : ""}
-                        onChange={(e) => setDraft({ ...draft, description: e.target.value })}
-                        placeholder={
-                          draftSpecsEnabled.description
-                            ? "Write evocative notes about this candle's scent, feel, and mood... (Required)"
-                            : "✕ Unticked - You cannot write here"
-                        }
-                        className={`w-full rounded-lg px-3 py-2.5 text-base sm:text-sm transition-all resize-y ${
-                          draftSpecsEnabled.description
-                            ? "border border-[#8a614830] bg-white text-ink outline-clay"
-                            : "border border-dashed border-stone-300 bg-stone-100/90 text-stone-400 cursor-not-allowed select-none"
-                        }`}
+                      </label>
+                      <input
+                        type="text"
+                        disabled={!editSpecsEnabled.description}
+                        value={editSpecsEnabled.description ? editForm.description : ""}
+                        onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                        placeholder="e.g. Handcrafted with warm cozy notes"
+                        className="mt-1.5 w-full rounded-lg border border-[#8a614830] px-2.5 py-1.5 text-xs disabled:bg-stone-100 disabled:opacity-50"
                       />
                     </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Product Photos Section */}
-              <div className="mt-5">
-                <label className="block text-xs font-semibold uppercase tracking-wider text-[#765442]">
-                  Product Photos
-                </label>
+                {/* Edit Photos */}
+                <div className="rounded-2xl border border-[#8a614825] bg-white p-3.5 sm:p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-ink">
+                      Candle Photos ({editForm.images.length})
+                    </h4>
+                    <label className="rounded-xl bg-ink text-white px-3 py-1.5 text-xs font-bold hover:bg-clay transition cursor-pointer">
+                      + Add Photos
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        className="hidden"
+                        onChange={handleEditProductPhotoFiles}
+                        disabled={isProcessingEditPhoto}
+                      />
+                    </label>
+                  </div>
 
-                {/* Upload from Device Button */}
-                <div className="mt-2 flex flex-col sm:flex-row sm:items-center gap-3">
-                  <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-clay bg-[#f8ede0] px-4 py-3 text-xs font-semibold text-clay hover:bg-clay hover:text-white transition w-full sm:w-auto shadow-2xs active:scale-95">
-                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                    Browse Device Photos
-                    <input
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      className="hidden"
-                      onChange={handleDraftFiles}
-                      disabled={isProcessingPhoto}
-                    />
-                  </label>
-                  <span className="text-xs text-[#765442]">
-                    {isProcessingPhoto ? "Optimizing image..." : "Upload photos directly from phone camera or gallery"}
-                  </span>
-                </div>
-
-                {/* Previews of uploaded images */}
-                {uploadedPhotos.length > 0 && (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {uploadedPhotos.map((src, i) => (
-                      <div
-                        key={i}
-                        className="group relative h-16 w-16 overflow-hidden rounded-xl border border-[#8a61483a]"
-                      >
-                        <img src={src} alt="Uploaded preview" className="h-full w-full object-cover" />
-                        <button
-                          type="button"
-                          onClick={() => removeUploadedPhoto(i)}
-                          className="absolute top-1 right-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/75 text-xs font-bold text-white hover:bg-red-600 transition cursor-pointer"
-                          title="Remove photo"
-                        >
-                          ×
-                        </button>
+                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 pt-1">
+                    {editForm.images.map((img, idx) => (
+                      <div key={idx} className="relative group rounded-xl overflow-hidden border border-[#8a614820] aspect-square">
+                        <img src={img} alt="" className="h-full w-full object-cover" />
+                        {idx === 0 && (
+                          <span className="absolute top-1 left-1 rounded bg-clay text-white text-[9px] font-bold px-1 py-0.5">
+                            Cover
+                          </span>
+                        )}
+                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition flex flex-col items-center justify-center gap-1 p-1">
+                          {idx !== 0 && (
+                            <button
+                              type="button"
+                              onClick={() => makeCoverPhoto(idx)}
+                              className="rounded bg-white px-1.5 py-0.5 text-[9px] font-bold text-ink"
+                            >
+                              Make Cover
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => removeEditPhoto(idx)}
+                            disabled={editForm.images.length <= 1}
+                            className="rounded bg-red-600 px-1.5 py-0.5 text-[9px] font-bold text-white disabled:opacity-40"
+                          >
+                            Remove
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
-                )}
 
-                {/* Optional Web URL fallback */}
-                <label className="mt-3 block text-xs text-[#765442]">
-                  Or paste Photo URLs (one per line):
-                  <textarea
-                    placeholder="https://..."
-                    value={draft.images}
-                    onChange={(e) => setDraft({ ...draft, images: e.target.value })}
-                    className="mt-1 h-14 w-full rounded-xl border border-[#8a614830] bg-white p-2.5 text-base sm:text-xs text-ink outline-clay"
-                  />
-                </label>
+                  <div className="flex gap-2 pt-2 border-t border-[#8a614815]">
+                    <input
+                      type="url"
+                      value={editNewImageUrl}
+                      onChange={(e) => setEditNewImageUrl(e.target.value)}
+                      placeholder="Or paste an image URL..."
+                      className="flex-1 rounded-xl border border-[#8a614830] px-3 py-1.5 text-xs text-ink outline-clay"
+                    />
+                    <button
+                      type="button"
+                      onClick={addEditImageUrl}
+                      disabled={!editNewImageUrl.trim()}
+                      className="rounded-xl bg-[#f5ede0] border border-[#8a614830] px-3 py-1.5 text-xs font-bold text-clay hover:bg-clay hover:text-white disabled:opacity-40"
+                    >
+                      + Add URL
+                    </button>
+                  </div>
+                </div>
               </div>
 
-              <button
-                type="submit"
-                disabled={isProcessingPhoto}
-                className="mt-5 w-full sm:w-auto rounded-full bg-ink px-7 py-3.5 text-base sm:text-sm font-bold text-white hover:bg-clay transition disabled:bg-stone-400 active:scale-[0.98] shadow-md cursor-pointer"
-              >
-                + Add candle to store
-              </button>
+              {/* Modal Footer Controls */}
+              <div className="flex items-center justify-between gap-3 border-t border-[#8a614820] bg-[#f5ede0] px-4 sm:px-6 py-3">
+                <button
+                  type="button"
+                  onClick={closeEditingProduct}
+                  disabled={isSavingProduct}
+                  className="rounded-xl border border-[#8a614830] bg-white px-4 py-2 text-xs sm:text-sm font-bold text-[#765442]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingProduct}
+                  className="rounded-xl bg-ink hover:bg-clay text-white px-6 py-2.5 text-xs sm:text-sm font-bold shadow-md transition active:scale-95 disabled:opacity-50"
+                >
+                  {isSavingProduct ? "Saving..." : "Save Changes & Sync ↗"}
+                </button>
+              </div>
             </form>
           </div>
+        </div>
+      )}
 
-          {/* Studio Settings Column */}
-          <div>
-            <h2 className="display text-2xl sm:text-3xl font-bold text-ink">Studio settings</h2>
-            <p className="mt-1 text-xs sm:text-sm text-[#765442]">
-              Manage payment destination UPI ID and access password.
-            </p>
-
-            {/* Payment QR Settings */}
-            <form onSubmit={payment} className="mt-4 rounded-2xl bg-white p-4 sm:p-5 shadow-sm border border-[#8a614820]">
-              <h3 className="font-semibold text-ink text-sm sm:text-base">Payment QR Destination</h3>
-              <p className="mt-1 text-xs sm:text-sm text-[#765442]">
-                This UPI ID generates each checkout QR code automatically.
-              </p>
-              <input
-                value={upi}
-                onChange={(e) => setUpi(e.target.value)}
-                className="mt-3 w-full rounded-xl border border-[#8a614830] p-3 text-base sm:text-sm text-ink outline-clay font-medium"
-                placeholder="name@upi"
-              />
-              <button
-                type="submit"
-                className="mt-3 w-full sm:w-auto rounded-full bg-ink px-5 py-2.5 text-sm font-semibold text-white hover:bg-clay transition active:scale-95 cursor-pointer shadow-2xs"
-              >
-                Save UPI ID
-              </button>
-            </form>
-
-            {/* Password Settings */}
-            <form onSubmit={password} className="mt-5 rounded-2xl bg-white p-4 sm:p-5 shadow-sm border border-[#8a614820]">
-              <h3 className="font-semibold text-ink text-sm sm:text-base">Change studio password</h3>
-              <p className="mt-1 text-xs sm:text-sm text-[#765442]">
-                Keep your studio dashboard secure.
-              </p>
-              <input
-                name="currentPassword"
-                type="password"
-                required
-                className="mt-3 w-full rounded-xl border border-[#8a614830] p-3 text-base sm:text-sm text-ink outline-clay"
-                placeholder="Current password"
-              />
-              <input
-                name="newPassword"
-                type="password"
-                required
-                minLength={8}
-                className="mt-3 w-full rounded-xl border border-[#8a614830] p-3 text-base sm:text-sm text-ink outline-clay"
-                placeholder="New password (8+ characters)"
-              />
-              <button
-                type="submit"
-                className="mt-4 w-full sm:w-auto rounded-full bg-ink px-5 py-2.5 text-sm font-semibold text-white hover:bg-clay transition active:scale-95 cursor-pointer shadow-2xs"
-              >
-                Update password
-              </button>
-            </form>
-
-            {/* Cloud Storage Status (Supabase) */}
-            <div className="mt-5 rounded-2xl bg-white p-4 sm:p-5 shadow-sm border border-[#8a614820]">
-              <div className="flex items-center gap-2">
-                <span className="flex h-2.5 w-2.5 relative">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-                </span>
-                <h3 className="font-semibold text-ink text-sm">Cloud Storage: Supabase</h3>
-              </div>
-              <p className="mt-2 text-xs leading-relaxed text-[#765442]">
-                Customer orders are persisted in <b>Supabase PostgreSQL</b> and payment proof screenshots are saved in the <b>payment-proofs</b> bucket. Real-time updates push directly to this studio dashboard.
-              </p>
-              <div className="mt-3 flex items-center gap-2 text-[11px] font-medium text-emerald-800 bg-emerald-50 rounded-lg p-2.5 border border-emerald-200">
-                <span>✓ Cloudflare KV binding removed · Zero-crash order processing active</span>
-              </div>
-            </div>
-          </div>
-        </section>
-      </div>
-
-      {/* Payment Screenshot Viewer Modal */}
+      {/* ==================================================== */}
+      {/* 7. PAYMENT SCREENSHOT VIEWER MODAL                   */}
+      {/* ==================================================== */}
       {selectedScreenshotOrder && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-2 sm:p-4 backdrop-blur-sm overflow-y-auto"
           onClick={() => setSelectedScreenshotOrder(null)}
         >
           <div
-            className="relative flex max-h-[94vh] sm:max-h-[92vh] w-full max-w-3xl flex-col rounded-2xl sm:rounded-3xl bg-[#fff8ed] shadow-2xl border border-[#8a61483a] overflow-hidden my-auto"
+            className="relative flex max-h-[94vh] sm:max-h-[92vh] w-full max-w-3xl flex-col rounded-3xl bg-[#fff8ed] shadow-2xl border border-[#8a61483a] overflow-hidden my-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-[#8a614820] bg-[#f5ede0] px-4 sm:px-6 py-3.5 sm:py-4">
-              <div className="min-w-0 pr-2">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="display text-base sm:text-xl text-ink font-bold break-all">
-                    Payment Verification: {selectedScreenshotOrder.id}
-                  </h3>
-                  <span className="rounded-full bg-clay/15 px-2.5 py-0.5 text-[11px] sm:text-xs font-semibold text-clay shrink-0">
-                    {selectedScreenshotOrder.status}
-                  </span>
-                </div>
-                <p className="mt-1 text-[11px] sm:text-xs text-[#765442] break-words">
-                  Customer: <b className="text-ink">{selectedScreenshotOrder.customer.name}</b> · Phone:{" "}
-                  <a href={`tel:${selectedScreenshotOrder.customer.phone}`} className="text-clay underline font-bold">
-                    {selectedScreenshotOrder.customer.phone}
-                  </a>{" "}
-                  · Total: <b className="text-clay">₹{selectedScreenshotOrder.total}</b>
+            <div className="flex items-center justify-between border-b border-[#8a614820] bg-[#f5ede0] px-4 sm:px-6 py-3.5">
+              <div>
+                <h3 className="display text-base sm:text-xl text-ink font-bold">
+                  Payment Verification: {selectedScreenshotOrder.id}
+                </h3>
+                <p className="text-[11px] text-[#765442]">
+                  Customer: <b>{selectedScreenshotOrder.customer.name}</b> ({selectedScreenshotOrder.customer.phone}) · ₹{selectedScreenshotOrder.total}
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setSelectedScreenshotOrder(null)}
-                className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-full bg-white/90 text-base sm:text-lg font-bold text-[#765442] hover:bg-clay hover:text-white transition shadow-sm cursor-pointer"
-                title="Close modal"
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-base font-bold text-[#765442] hover:bg-clay hover:text-white"
               >
                 ✕
               </button>
             </div>
 
-            {/* 3-Day Cloud Storage Expiry Notice */}
-            <div className="flex items-center justify-between bg-[#fff0db] px-4 sm:px-6 py-2 sm:py-2.5 text-[11px] sm:text-xs text-[#8a4e1d] border-b border-[#f0cca3]">
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-[#e5832d] animate-pulse shrink-0" />
-                <span>
-                  <b>3-Day Cloud Retention:</b> Proof automatically expires in{" "}
-                  <b>{getScreenshotExpiryInfo(selectedScreenshotOrder.createdAt, selectedScreenshotOrder.screenshotExpiresAt).timeLeftText}</b>.
-                </span>
-              </div>
+            <div className="bg-[#fff0db] px-4 sm:px-6 py-2 text-[11px] text-[#8a4e1d] border-b border-[#f0cca3]">
+              ⏱ <b>Retention Notice:</b> Screenshot automatically purged after 3 days.{" "}
+              <b>{getScreenshotExpiryInfo(selectedScreenshotOrder.createdAt, selectedScreenshotOrder.screenshotExpiresAt).timeLeftText}</b>.
             </div>
 
-            {/* Image Display Body */}
-            <div className="flex-1 overflow-auto bg-[#2b1911] p-3 sm:p-4 flex items-center justify-center min-h-[220px] sm:min-h-[360px]">
+            <div className="flex-1 overflow-auto bg-[#2b1911] p-4 flex items-center justify-center min-h-[260px]">
               {selectedScreenshotOrder.screenshot ? (
                 <img
                   src={selectedScreenshotOrder.screenshot}
-                  alt={`Payment screenshot for order ${selectedScreenshotOrder.id}`}
-                  className="max-h-[55vh] sm:max-h-[60vh] max-w-full rounded-xl object-contain shadow-2xl border border-white/10"
+                  alt="Payment Screenshot"
+                  className="max-h-[60vh] max-w-full rounded-xl object-contain shadow-2xl"
                 />
               ) : (
-                <div className="text-center p-8 sm:p-12 text-stone-300">
-                  <p className="text-sm sm:text-base font-semibold">Screenshot Expired</p>
-                  <p className="text-xs text-stone-400 mt-1">
-                    This payment screenshot was automatically purged after 3 days to preserve cloud storage.
-                  </p>
+                <div className="text-center text-stone-300 p-8">
+                  <p className="font-bold">Screenshot Expired</p>
+                  <p className="text-xs text-stone-400 mt-1">This payment screenshot was automatically purged from cloud storage.</p>
                 </div>
               )}
             </div>
 
-            {/* Modal Footer Controls */}
-            <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3 bg-[#f5ede0] px-4 sm:px-6 py-3 sm:py-3.5 border-t border-[#8a614820]">
-              <div className="grid grid-cols-2 sm:flex items-center gap-2">
+            <div className="flex items-center justify-between gap-3 border-t border-[#8a614820] bg-[#f5ede0] px-4 sm:px-6 py-3">
+              <div className="flex items-center gap-2">
                 {selectedScreenshotOrder.screenshot && (
                   <>
                     <button
@@ -2182,14 +3094,14 @@ export default function Admin() {
                           selectedScreenshotOrder.customer.name
                         )
                       }
-                      className="rounded-xl border border-[#8a61483a] bg-white px-3 py-2 text-xs font-semibold text-clay hover:bg-clay hover:text-white transition shadow-xs text-center cursor-pointer active:scale-95"
+                      className="rounded-xl border border-[#8a614830] bg-white px-3 py-1.5 text-xs font-bold text-clay hover:bg-clay hover:text-white"
                     >
                       Open in Tab ↗
                     </button>
                     <a
                       href={selectedScreenshotOrder.screenshot}
                       download={`payment-order-${selectedScreenshotOrder.id}.jpg`}
-                      className="rounded-xl bg-ink px-3 py-2 text-xs font-semibold text-white hover:bg-clay transition shadow-xs text-center active:scale-95 flex items-center justify-center"
+                      className="rounded-xl bg-ink text-white px-3 py-1.5 text-xs font-bold hover:bg-clay"
                     >
                       Download ↓
                     </a>
@@ -2202,15 +3114,11 @@ export default function Admin() {
                   <button
                     type="button"
                     onClick={async () => {
-                      if (
-                        confirm(
-                          `Delete screenshot for order ${selectedScreenshotOrder.id} early to save cloud storage?`
-                        )
-                      ) {
+                      if (confirm(`Delete screenshot for order ${selectedScreenshotOrder.id} early to save storage?`)) {
                         await deleteScreenshotEarly(selectedScreenshotOrder.id);
                       }
                     }}
-                    className="flex-1 sm:flex-initial rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-600 hover:text-white transition cursor-pointer text-center"
+                    className="rounded-xl border border-red-200 bg-red-50 text-red-700 px-3 py-1.5 text-xs font-bold hover:bg-red-600 hover:text-white"
                   >
                     Delete Early
                   </button>
@@ -2218,583 +3126,12 @@ export default function Admin() {
                 <button
                   type="button"
                   onClick={() => setSelectedScreenshotOrder(null)}
-                  className="flex-1 sm:flex-initial rounded-xl border border-[#8a61483a] bg-white px-4 py-2 text-xs font-semibold text-ink hover:bg-stone-100 transition cursor-pointer text-center"
+                  className="rounded-xl border border-[#8a614830] bg-white px-4 py-1.5 text-xs font-bold text-ink"
                 >
                   Close
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Product Edit Modal */}
-      {editingProduct && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-2 sm:p-4 backdrop-blur-sm overflow-y-auto"
-          onClick={closeEditingProduct}
-        >
-          <div
-            className="relative flex max-h-[96vh] sm:max-h-[94vh] w-full max-w-2xl flex-col rounded-2xl sm:rounded-3xl bg-[#fff8ed] shadow-2xl border border-[#8a61483a] overflow-hidden my-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-[#8a614820] bg-[#f5ede0] px-4 sm:px-6 py-3.5 sm:py-4">
-              <div className="min-w-0 pr-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-lg sm:text-xl shrink-0">✏️</span>
-                  <h3 className="display text-base sm:text-xl text-ink font-bold truncate">
-                    Edit Candle: {editingProduct.name}
-                  </h3>
-                </div>
-                <p className="text-[11px] sm:text-xs text-[#765442] mt-0.5 truncate">
-                  Edits save directly to cloud database & sync immediately with store.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={closeEditingProduct}
-                disabled={isSavingProduct}
-                className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-full bg-white/90 text-base sm:text-lg font-bold text-[#765442] hover:bg-clay hover:text-white transition shadow-sm cursor-pointer disabled:opacity-50"
-                title="Close editor"
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Modal Body / Form */}
-            <form onSubmit={saveEditedProduct} className="flex flex-col flex-1 overflow-hidden">
-              <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
-                {/* Candle Name & Price */}
-                <div className="grid gap-3.5 sm:grid-cols-2">
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-[#765442] mb-1">
-                      Candle Name *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={editForm.name}
-                      onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                      placeholder="e.g. Amber & Sandalwood"
-                      className="w-full rounded-xl border border-[#8a614830] bg-white px-3.5 py-2.5 text-base sm:text-sm text-ink outline-clay shadow-2xs font-medium"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-[#765442] mb-1">
-                      Price (₹ INR) *
-                    </label>
-                    <div className="relative">
-                      <span className="absolute left-3.5 top-2.5 text-sm font-bold text-[#765442]">₹</span>
-                      <input
-                        type="number"
-                        required
-                        min="0"
-                        step="1"
-                        value={editForm.price}
-                        onChange={(e) => setEditForm({ ...editForm, price: e.target.value })}
-                        placeholder="e.g. 649"
-                        className="w-full rounded-xl border border-[#8a614830] bg-white pl-8 pr-3.5 py-2.5 text-base sm:text-sm font-bold text-ink outline-clay shadow-2xs"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Category & Stock Status */}
-                <div className="grid gap-3.5 sm:grid-cols-2">
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-[#765442] mb-1">
-                      Category
-                    </label>
-                    <select
-                      value={editForm.category}
-                      onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
-                      className="w-full rounded-xl border border-[#8a614830] bg-white px-3 py-2.5 text-base sm:text-sm text-ink outline-clay shadow-2xs cursor-pointer"
-                    >
-                      <option value="Jar candle">Jar candle</option>
-                      <option value="Sculptural">Sculptural</option>
-                      <option value="Flower candle">Flower candle</option>
-                      <option value="Tin candle">Tin candle</option>
-                      <option value="Wax melts">Wax melts</option>
-                      <option value="Aromatherapy">Aromatherapy</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-[#765442] mb-1">
-                      Availability Status
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setEditForm({ ...editForm, available: !editForm.available })}
-                      className={`flex items-center justify-between w-full rounded-xl border px-3.5 py-2.5 text-base sm:text-sm font-semibold transition shadow-2xs cursor-pointer active:scale-95 ${
-                        editForm.available
-                          ? "border-emerald-300 bg-emerald-50 text-emerald-800"
-                          : "border-stone-300 bg-stone-100 text-stone-600"
-                      }`}
-                    >
-                      <span className="flex items-center gap-2">
-                        <span
-                          className={`h-2.5 w-2.5 rounded-full ${
-                            editForm.available ? "bg-emerald-500 animate-pulse" : "bg-stone-400"
-                          }`}
-                        />
-                        {editForm.available ? "In Stock (Available)" : "Sold Out (Unavailable)"}
-                      </span>
-                      <span className="text-xs underline opacity-80">Toggle</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Removable / Tickable Specifications Section */}
-                <div className="rounded-2xl border border-[#8a614825] bg-[#fff6eb]/60 p-3.5 sm:p-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 border-b border-[#8a614815] pb-2.5 mb-3">
-                    <div>
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-ink flex items-center gap-1.5">
-                        <span>⚙️</span> Candle Specifications (Tick to Include)
-                      </h4>
-                      <p className="text-[11px] text-[#765442] mt-0.5">
-                        Tick to include. If ticked, it <b>must be filled</b>. If unticked, it cannot be written & will be removed.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {/* 1. Wick Size (Wink size) */}
-                    <div
-                      className={`rounded-xl border p-3 transition-all ${
-                        editSpecsEnabled.wickSize
-                          ? "border-emerald-300 bg-white shadow-2xs"
-                          : "border-stone-200 bg-stone-100/70"
-                      }`}
-                    >
-                      <label className="flex items-center justify-between cursor-pointer select-none">
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={editSpecsEnabled.wickSize}
-                            onChange={(e) =>
-                              setEditSpecsEnabled((p) => ({ ...p, wickSize: e.target.checked }))
-                            }
-                            className="h-4 w-4 rounded accent-[#9b4a1b] cursor-pointer"
-                          />
-                          <span className="text-xs font-bold text-ink flex items-center gap-1.5">
-                            <span>🕯️</span> Wick Size <span className="text-[10px] font-normal text-[#765442]">(Wink)</span>
-                          </span>
-                        </div>
-                        {editSpecsEnabled.wickSize ? (
-                          <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                            ✓ Ticked (Must fill)
-                          </span>
-                        ) : (
-                          <span className="rounded-md bg-stone-200 px-2 py-0.5 text-[10px] font-medium text-stone-600">
-                            ✕ Excluded
-                          </span>
-                        )}
-                      </label>
-                      <div className="mt-2">
-                        <input
-                          type="text"
-                          disabled={!editSpecsEnabled.wickSize}
-                          required={editSpecsEnabled.wickSize}
-                          value={editSpecsEnabled.wickSize ? editForm.wickSize : ""}
-                          onChange={(e) => setEditForm({ ...editForm, wickSize: e.target.value })}
-                          placeholder={
-                            editSpecsEnabled.wickSize
-                              ? "e.g. 24-ply braided cotton wick (Required)"
-                              : "✕ Unticked - You cannot write here"
-                          }
-                          className={`w-full rounded-lg px-3 py-2 text-base sm:text-sm transition-all ${
-                            editSpecsEnabled.wickSize
-                              ? "border border-[#8a614830] bg-white text-ink outline-clay font-medium"
-                              : "border border-dashed border-stone-300 bg-stone-100/90 text-stone-400 cursor-not-allowed select-none"
-                          }`}
-                        />
-                      </div>
-                    </div>
-
-                    {/* 2. Candle Length & Breadth (Dimensions) */}
-                    <div
-                      className={`rounded-xl border p-3 transition-all ${
-                        editSpecsEnabled.candleDimensions
-                          ? "border-emerald-300 bg-white shadow-2xs"
-                          : "border-stone-200 bg-stone-100/70"
-                      }`}
-                    >
-                      <label className="flex items-center justify-between cursor-pointer select-none">
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={editSpecsEnabled.candleDimensions}
-                            onChange={(e) =>
-                              setEditSpecsEnabled((p) => ({ ...p, candleDimensions: e.target.checked }))
-                            }
-                            className="h-4 w-4 rounded accent-[#9b4a1b] cursor-pointer"
-                          />
-                          <span className="text-xs font-bold text-ink flex items-center gap-1.5">
-                            <span>📏</span> Length & Breadth <span className="text-[10px] font-normal text-[#765442]">(Dimensions)</span>
-                          </span>
-                        </div>
-                        {editSpecsEnabled.candleDimensions ? (
-                          <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                            ✓ Ticked (Must fill)
-                          </span>
-                        ) : (
-                          <span className="rounded-md bg-stone-200 px-2 py-0.5 text-[10px] font-medium text-stone-600">
-                            ✕ Excluded
-                          </span>
-                        )}
-                      </label>
-                      <div className="mt-2">
-                        <input
-                          type="text"
-                          disabled={!editSpecsEnabled.candleDimensions}
-                          required={editSpecsEnabled.candleDimensions}
-                          value={editSpecsEnabled.candleDimensions ? editForm.candleDimensions : ""}
-                          onChange={(e) => setEditForm({ ...editForm, candleDimensions: e.target.value })}
-                          placeholder={
-                            editSpecsEnabled.candleDimensions
-                              ? "e.g. 7.5 cm (L) × 7.5 cm (B) × 9 cm (H) (Required)"
-                              : "✕ Unticked - You cannot write here"
-                          }
-                          className={`w-full rounded-lg px-3 py-2 text-base sm:text-sm transition-all ${
-                            editSpecsEnabled.candleDimensions
-                              ? "border border-[#8a614830] bg-white text-ink outline-clay font-medium"
-                              : "border border-dashed border-stone-300 bg-stone-100/90 text-stone-400 cursor-not-allowed select-none"
-                          }`}
-                        />
-                      </div>
-                    </div>
-
-                    {/* 3. Fragrance */}
-                    <div
-                      className={`rounded-xl border p-3 transition-all ${
-                        editSpecsEnabled.fragrance
-                          ? "border-emerald-300 bg-white shadow-2xs"
-                          : "border-stone-200 bg-stone-100/70"
-                      }`}
-                    >
-                      <label className="flex items-center justify-between cursor-pointer select-none">
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={editSpecsEnabled.fragrance}
-                            onChange={(e) =>
-                              setEditSpecsEnabled((p) => ({ ...p, fragrance: e.target.checked }))
-                            }
-                            className="h-4 w-4 rounded accent-[#9b4a1b] cursor-pointer"
-                          />
-                          <span className="text-xs font-bold text-ink flex items-center gap-1.5">
-                            <span>🌸</span> Fragrance <span className="text-[10px] font-normal text-[#765442]">(Scent)</span>
-                          </span>
-                        </div>
-                        {editSpecsEnabled.fragrance ? (
-                          <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                            ✓ Ticked (Must fill)
-                          </span>
-                        ) : (
-                          <span className="rounded-md bg-stone-200 px-2 py-0.5 text-[10px] font-medium text-stone-600">
-                            ✕ Excluded
-                          </span>
-                        )}
-                      </label>
-                      <div className="mt-2">
-                        <input
-                          type="text"
-                          disabled={!editSpecsEnabled.fragrance}
-                          required={editSpecsEnabled.fragrance}
-                          value={editSpecsEnabled.fragrance ? editForm.fragrance : ""}
-                          onChange={(e) => setEditForm({ ...editForm, fragrance: e.target.value })}
-                          placeholder={
-                            editSpecsEnabled.fragrance
-                              ? "e.g. French Vanilla, Lavender & Sandalwood (Required)"
-                              : "✕ Unticked - You cannot write here"
-                          }
-                          className={`w-full rounded-lg px-3 py-2 text-base sm:text-sm transition-all ${
-                            editSpecsEnabled.fragrance
-                              ? "border border-[#8a614830] bg-white text-ink outline-clay font-medium"
-                              : "border border-dashed border-stone-300 bg-stone-100/90 text-stone-400 cursor-not-allowed select-none"
-                          }`}
-                        />
-                      </div>
-                    </div>
-
-                    {/* 4. Burn Time */}
-                    <div
-                      className={`rounded-xl border p-3 transition-all ${
-                        editSpecsEnabled.burnTime
-                          ? "border-emerald-300 bg-white shadow-2xs"
-                          : "border-stone-200 bg-stone-100/70"
-                      }`}
-                    >
-                      <label className="flex items-center justify-between cursor-pointer select-none">
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={editSpecsEnabled.burnTime}
-                            onChange={(e) =>
-                              setEditSpecsEnabled((p) => ({ ...p, burnTime: e.target.checked }))
-                            }
-                            className="h-4 w-4 rounded accent-[#9b4a1b] cursor-pointer"
-                          />
-                          <span className="text-xs font-bold text-ink flex items-center gap-1.5">
-                            <span>⏳</span> Burn Time <span className="text-[10px] font-normal text-[#765442]">(Hours)</span>
-                          </span>
-                        </div>
-                        {editSpecsEnabled.burnTime ? (
-                          <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                            ✓ Ticked (Must fill)
-                          </span>
-                        ) : (
-                          <span className="rounded-md bg-stone-200 px-2 py-0.5 text-[10px] font-medium text-stone-600">
-                            ✕ Excluded
-                          </span>
-                        )}
-                      </label>
-                      <div className="mt-2">
-                        <input
-                          type="text"
-                          disabled={!editSpecsEnabled.burnTime}
-                          required={editSpecsEnabled.burnTime}
-                          value={editSpecsEnabled.burnTime ? editForm.burnTime : ""}
-                          onChange={(e) => setEditForm({ ...editForm, burnTime: e.target.value })}
-                          placeholder={
-                            editSpecsEnabled.burnTime
-                              ? "e.g. 35–40 hours (Required)"
-                              : "✕ Unticked - You cannot write here"
-                          }
-                          className={`w-full rounded-lg px-3 py-2 text-base sm:text-sm transition-all ${
-                            editSpecsEnabled.burnTime
-                              ? "border border-[#8a614830] bg-white text-ink outline-clay font-medium"
-                              : "border border-dashed border-stone-300 bg-stone-100/90 text-stone-400 cursor-not-allowed select-none"
-                          }`}
-                        />
-                      </div>
-                    </div>
-
-                    {/* 5. Ingredients */}
-                    <div
-                      className={`rounded-xl border p-3 transition-all ${
-                        editSpecsEnabled.ingredients
-                          ? "border-emerald-300 bg-white shadow-2xs"
-                          : "border-stone-200 bg-stone-100/70"
-                      }`}
-                    >
-                      <label className="flex items-center justify-between cursor-pointer select-none">
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={editSpecsEnabled.ingredients}
-                            onChange={(e) =>
-                              setEditSpecsEnabled((p) => ({ ...p, ingredients: e.target.checked }))
-                            }
-                            className="h-4 w-4 rounded accent-[#9b4a1b] cursor-pointer"
-                          />
-                          <span className="text-xs font-bold text-ink flex items-center gap-1.5">
-                            <span>🌿</span> Ingredients <span className="text-[10px] font-normal text-[#765442]">(Made with)</span>
-                          </span>
-                        </div>
-                        {editSpecsEnabled.ingredients ? (
-                          <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                            ✓ Ticked (Must fill)
-                          </span>
-                        ) : (
-                          <span className="rounded-md bg-stone-200 px-2 py-0.5 text-[10px] font-medium text-stone-600">
-                            ✕ Excluded
-                          </span>
-                        )}
-                      </label>
-                      <div className="mt-2">
-                        <input
-                          type="text"
-                          disabled={!editSpecsEnabled.ingredients}
-                          required={editSpecsEnabled.ingredients}
-                          value={editSpecsEnabled.ingredients ? editForm.ingredients : ""}
-                          onChange={(e) => setEditForm({ ...editForm, ingredients: e.target.value })}
-                          placeholder={
-                            editSpecsEnabled.ingredients
-                              ? "e.g. 100% Pure Soy Wax, Organic Essential Oils (Required)"
-                              : "✕ Unticked - You cannot write here"
-                          }
-                          className={`w-full rounded-lg px-3 py-2 text-base sm:text-sm transition-all ${
-                            editSpecsEnabled.ingredients
-                              ? "border border-[#8a614830] bg-white text-ink outline-clay font-medium"
-                              : "border border-dashed border-stone-300 bg-stone-100/90 text-stone-400 cursor-not-allowed select-none"
-                          }`}
-                        />
-                      </div>
-                    </div>
-
-                    {/* 6. Description */}
-                    <div
-                      className={`rounded-xl border p-3 transition-all ${
-                        editSpecsEnabled.description
-                          ? "border-emerald-300 bg-white shadow-2xs"
-                          : "border-stone-200 bg-stone-100/70"
-                      }`}
-                    >
-                      <label className="flex items-center justify-between cursor-pointer select-none">
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={editSpecsEnabled.description}
-                            onChange={(e) =>
-                              setEditSpecsEnabled((p) => ({ ...p, description: e.target.checked }))
-                            }
-                            className="h-4 w-4 rounded accent-[#9b4a1b] cursor-pointer"
-                          />
-                          <span className="text-xs font-bold text-ink flex items-center gap-1.5">
-                            <span>📝</span> Description <span className="text-[10px] font-normal text-[#765442]">(Scent & mood)</span>
-                          </span>
-                        </div>
-                        {editSpecsEnabled.description ? (
-                          <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                            ✓ Ticked (Must fill)
-                          </span>
-                        ) : (
-                          <span className="rounded-md bg-stone-200 px-2 py-0.5 text-[10px] font-medium text-stone-600">
-                            ✕ Excluded
-                          </span>
-                        )}
-                      </label>
-                      <div className="mt-2">
-                        <textarea
-                          rows={2}
-                          disabled={!editSpecsEnabled.description}
-                          required={editSpecsEnabled.description}
-                          value={editSpecsEnabled.description ? editForm.description : ""}
-                          onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                          placeholder={
-                            editSpecsEnabled.description
-                              ? "Write evocative notes about this candle's scent, feel, and mood... (Required)"
-                              : "✕ Unticked - You cannot write here"
-                          }
-                          className={`w-full rounded-lg px-3 py-2 text-base sm:text-sm transition-all resize-y ${
-                            editSpecsEnabled.description
-                              ? "border border-[#8a614830] bg-white text-ink outline-clay font-medium"
-                              : "border border-dashed border-stone-300 bg-stone-100/90 text-stone-400 cursor-not-allowed select-none"
-                          }`}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Product Photos Section */}
-                <div className="rounded-2xl border border-[#8a614820] bg-white/70 p-3.5 sm:p-4 space-y-3">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <div>
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-ink">
-                        Photos ({editForm.images.length})
-                      </h4>
-                      <p className="text-[11px] text-[#765442]">
-                        First photo is the cover. Tap &quot;Make Cover&quot; to set.
-                      </p>
-                    </div>
-
-                    <label className="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-clay bg-[#f8ede0] px-3.5 py-2.5 text-xs font-semibold text-clay hover:bg-clay hover:text-white transition shadow-2xs w-full sm:w-auto active:scale-95">
-                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                      </svg>
-                      <span>Upload from Device</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        className="hidden"
-                        onChange={handleEditProductPhotoFiles}
-                        disabled={isProcessingEditPhoto}
-                      />
-                    </label>
-                  </div>
-
-                  {/* Existing Photos Grid */}
-                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5 pt-1">
-                    {editForm.images.map((img, idx) => (
-                      <div
-                        key={idx}
-                        className="relative group rounded-xl overflow-hidden border border-[#8a61482a] bg-[#19120c] aspect-square"
-                      >
-                        <img src={img} alt="" className="h-full w-full object-cover" />
-                        {idx === 0 && (
-                          <span className="absolute top-1 left-1 rounded-md bg-clay text-[10px] font-bold text-white px-1.5 py-0.5 shadow-xs">
-                            Cover
-                          </span>
-                        )}
-                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition flex flex-col items-center justify-center gap-1 p-1">
-                          {idx !== 0 && (
-                            <button
-                              type="button"
-                              onClick={() => makeCoverPhoto(idx)}
-                              className="rounded bg-white/90 px-1.5 py-0.5 text-[10px] font-bold text-ink hover:bg-white"
-                            >
-                              Make Cover
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => removeEditPhoto(idx)}
-                            disabled={editForm.images.length <= 1}
-                            className="rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-bold text-white hover:bg-red-700 disabled:opacity-40"
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Add by URL option */}
-                  <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t border-[#8a614815]">
-                    <input
-                      type="url"
-                      value={editNewImageUrl}
-                      onChange={(e) => setEditNewImageUrl(e.target.value)}
-                      placeholder="Or paste an image URL (https://...)"
-                      className="flex-1 rounded-xl border border-[#8a614830] bg-white px-3 py-2 text-base sm:text-xs text-ink outline-clay"
-                    />
-                    <button
-                      type="button"
-                      onClick={addEditImageUrl}
-                      disabled={!editNewImageUrl.trim()}
-                      className="rounded-xl bg-[#f5ede0] border border-[#8a614830] px-3.5 py-2 text-xs font-semibold text-clay hover:bg-clay hover:text-white transition disabled:opacity-50 cursor-pointer text-center shrink-0 active:scale-95"
-                    >
-                      + Add URL
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Modal Footer Controls */}
-              <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3 border-t border-[#8a614820] bg-[#f5ede0] px-4 sm:px-6 py-3.5 sm:py-4">
-                <button
-                  type="button"
-                  onClick={closeEditingProduct}
-                  disabled={isSavingProduct}
-                  className="rounded-xl border border-[#8a61483a] bg-white px-4 py-2.5 text-sm font-semibold text-[#765442] hover:bg-stone-100 transition cursor-pointer disabled:opacity-50 text-center"
-                >
-                  Cancel
-                </button>
-
-                <button
-                  type="submit"
-                  disabled={isSavingProduct}
-                  className="flex items-center justify-center gap-2 rounded-xl bg-ink px-6 py-3 text-sm font-bold text-white hover:bg-clay transition shadow-md cursor-pointer disabled:opacity-50 text-center active:scale-[0.98]"
-                >
-                  {isSavingProduct ? (
-                    <>
-                      <span className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                      <span>Saving & Syncing...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>Save Changes & Sync ↗</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}
