@@ -294,3 +294,59 @@ export async function saveProductsToSupabase(products: Product[]): Promise<boole
   }
 }
 
+/**
+ * Global Cloud Category Store: Fetch persistent custom categories from Supabase
+ */
+export async function fetchCategoriesFromSupabase(): Promise<string[] | null> {
+  if (!isSupabaseConfigured()) return null;
+
+  try {
+    const { data, error } = await supabase
+      .from("orders")
+      .select("items")
+      .eq("id", "__SYSTEM_STORE_CATEGORIES__")
+      .maybeSingle();
+
+    if (!error && data?.items && Array.isArray(data.items)) {
+      return data.items as string[];
+    }
+    return null;
+  } catch (err: any) {
+    console.warn("[Supabase DB] Could not fetch cloud categories:", err.message);
+    return null;
+  }
+}
+
+/**
+ * Global Cloud Category Store: Persist categories to Supabase
+ */
+export async function saveCategoriesToSupabase(categories: string[]): Promise<boolean> {
+  if (!isSupabaseConfigured()) return false;
+
+  try {
+    const { error } = await supabase.from("orders").upsert([
+      {
+        id: "__SYSTEM_STORE_CATEGORIES__",
+        customer_name: "Candlemate Studio Categories",
+        customer_phone: "0000000000",
+        customer_address: "Candlemate Cloud Categories Store",
+        items: categories,
+        total: 0,
+        status: "SYSTEM_INTERNAL",
+        created_at: new Date().toISOString(),
+      },
+    ]);
+
+    if (error) {
+      console.error("[Supabase DB] Error syncing categories to cloud:", error.message);
+      return false;
+    }
+
+    console.log(`[Supabase DB] 🕯️ Successfully synced ${categories.length} categories to cloud store.`);
+    return true;
+  } catch (err: any) {
+    console.error("[Supabase DB] Unexpected error syncing categories:", err.message);
+    return false;
+  }
+}
+

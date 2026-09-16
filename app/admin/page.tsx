@@ -175,6 +175,20 @@ export default function Admin() {
   const [productSearchQuery, setProductSearchQuery] = useState("");
   const [productCategoryFilter, setProductCategoryFilter] = useState("All");
 
+  // Category Management States
+  const [categories, setCategories] = useState<string[]>([
+    "Jar candle",
+    "Sculptural",
+    "Flower candle",
+    "Tin candle",
+    "Wax melts",
+    "Aromatherapy",
+  ]);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [isAddingCategory, setIsAddingCategory] = useState(false);
+  const [isCustomCategoryDraft, setIsCustomCategoryDraft] = useState(false);
+  const [isCustomCategoryEdit, setIsCustomCategoryEdit] = useState(false);
+
   const orderCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   // ----------------------------------------------------
@@ -442,13 +456,17 @@ export default function Admin() {
         o = await fetch("/api/admin/orders").then((r) => r.json());
       }
 
-      const [p, s] = await Promise.all([
+      const [p, s, cats] = await Promise.all([
         fetch("/api/products").then((r) => r.json()),
         fetch("/api/settings/payment").then((r) => r.json()),
+        fetch("/api/categories").then((r) => r.json()).catch(() => []),
       ]);
       setOrders(Array.isArray(o) ? o : []);
       setProducts(Array.isArray(p) ? p : []);
       setUpi(s.upiId || "");
+      if (Array.isArray(cats) && cats.length > 0) {
+        setCategories(cats);
+      }
 
       // Background auto-reconciliation: Automatically re-check any pending Cashfree orders
       if (Array.isArray(o)) {
@@ -913,6 +931,18 @@ export default function Admin() {
         description: false,
       });
       setUploadedPhotos([]);
+
+      // If a custom category was typed, auto-register it in categories
+      const finalCategory = draft.category?.trim();
+      if (finalCategory && !allCategoriesList.some((c) => c.toLowerCase() === finalCategory.toLowerCase())) {
+        fetch("/api/categories", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: finalCategory }),
+        }).catch(() => {});
+      }
+
+      setIsCustomCategoryDraft(false);
       setIsAddModalOpen(false);
       setNotice(`✓ "${draft.name.trim()}" added to your candle collection!`);
       setActiveTab("products");
@@ -1100,6 +1130,17 @@ export default function Admin() {
         prev.map((item) => (item.id === editingProduct.id ? updated : item))
       );
 
+      // If a custom category was typed, auto-register it in categories
+      const finalCategory = editForm.category?.trim();
+      if (finalCategory && !allCategoriesList.some((c) => c.toLowerCase() === finalCategory.toLowerCase())) {
+        fetch("/api/categories", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: finalCategory }),
+        }).catch(() => {});
+      }
+
+      setIsCustomCategoryEdit(false);
       setNotice(`✓ "${updated.name}" updated! Live on customer store.`);
       setEditingProduct(null);
       load();
@@ -1140,6 +1181,67 @@ export default function Admin() {
     if (confirm("Remove this candle from your collection?")) {
       await fetch(`/api/products/${encodeURIComponent(id)}`, { method: "DELETE" });
       load();
+    }
+  }
+
+  // ----------------------------------------------------
+  // Category Actions
+  // ----------------------------------------------------
+  async function handleAddCategory(name?: string) {
+    const catName = (name || newCategoryName).trim();
+    if (!catName) {
+      setNotice("Please enter a category name.");
+      return;
+    }
+
+    setIsAddingCategory(true);
+    try {
+      const res = await fetch("/api/categories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: catName }),
+      });
+      const data = await res.json();
+      if (res.ok && Array.isArray(data.categories)) {
+        setCategories(data.categories);
+        setNewCategoryName("");
+        setNotice(`✓ Category "${catName}" added! Synced to homepage.`);
+      } else {
+        setNotice(data.error || "Failed to add category");
+      }
+    } catch {
+      setNotice("Failed to save category.");
+    } finally {
+      setIsAddingCategory(false);
+    }
+  }
+
+  async function handleDeleteCategory(catName: string) {
+    const usedCount = products.filter(
+      (p) => p.category && p.category.toLowerCase() === catName.toLowerCase()
+    ).length;
+
+    if (usedCount > 0) {
+      if (!confirm(`"${catName}" is currently assigned to ${usedCount} candle(s). Are you sure you want to remove it?`)) {
+        return;
+      }
+    } else {
+      if (!confirm(`Remove category "${catName}"?`)) return;
+    }
+
+    try {
+      const res = await fetch("/api/categories", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: catName }),
+      });
+      const data = await res.json();
+      if (res.ok && Array.isArray(data.categories)) {
+        setCategories(data.categories);
+        setNotice(`✓ Category "${catName}" removed.`);
+      }
+    } catch {
+      setNotice("Failed to delete category.");
     }
   }
 
@@ -1187,13 +1289,20 @@ export default function Admin() {
     });
   }, [products, productCategoryFilter, productSearchQuery]);
 
-  const productCategories = useMemo(() => {
+  const allCategoriesList = useMemo(() => {
     const cats = new Set<string>();
-    products.forEach((p) => {
-      if (p.category) cats.add(p.category);
+    categories.forEach((c) => {
+      if (c && c.trim()) cats.add(c.trim());
     });
-    return ["All", ...Array.from(cats)];
-  }, [products]);
+    products.forEach((p) => {
+      if (p.category && p.category.trim()) cats.add(p.category.trim());
+    });
+    return Array.from(cats);
+  }, [categories, products]);
+
+  const productCategories = useMemo(() => {
+    return ["All", ...allCategoriesList];
+  }, [allCategoriesList]);
 
   return (
     <main className="min-h-screen bg-[#f8f0e3] text-ink pb-24 md:pb-12">
@@ -2103,6 +2212,72 @@ export default function Admin() {
               </button>
             </div>
 
+            {/* Category Manager Card */}
+            <div className="rounded-2xl sm:rounded-3xl bg-white/90 border border-[#8a614825] p-3.5 sm:p-5 shadow-sm space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-[#8a614815] pb-3">
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-ink flex items-center gap-1.5">
+                    <span>🏷️</span> Storefront Categories ({allCategoriesList.length})
+                  </h3>
+                  <p className="text-xs text-[#765442] mt-0.5">
+                    Categories added here sync with the homepage category filter bar.
+                  </p>
+                </div>
+
+                {/* Quick Add Category Form */}
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    handleAddCategory();
+                  }}
+                  className="flex items-center gap-2 w-full sm:w-auto"
+                >
+                  <input
+                    type="text"
+                    value={newCategoryName}
+                    onChange={(e) => setNewCategoryName(e.target.value)}
+                    placeholder="New category name (e.g. Gift Hampers)..."
+                    className="flex-1 sm:w-60 rounded-xl border border-[#8a614830] bg-white px-3 py-2 text-xs text-ink outline-clay shadow-2xs font-medium"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!newCategoryName.trim() || isAddingCategory}
+                    className="shrink-0 rounded-xl bg-ink text-white px-3.5 py-2 text-xs font-bold hover:bg-clay transition disabled:opacity-40 active:scale-95 shadow-2xs cursor-pointer"
+                  >
+                    {isAddingCategory ? "Adding..." : "+ Add Category"}
+                  </button>
+                </form>
+              </div>
+
+              {/* Badges List with counts and delete */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar sm:flex-wrap">
+                {allCategoriesList.map((cat) => {
+                  const count = products.filter(
+                    (p) => p.category && p.category.toLowerCase() === cat.toLowerCase()
+                  ).length;
+                  return (
+                    <div
+                      key={cat}
+                      className="shrink-0 inline-flex items-center gap-1.5 rounded-full bg-[#f6ece1] border border-[#8a614825] px-3 py-1 text-xs font-bold text-ink shadow-2xs"
+                    >
+                      <span>{cat}</span>
+                      <span className="rounded-full bg-white px-1.5 py-0.2 text-[10px] font-mono font-black text-clay">
+                        {count}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteCategory(cat)}
+                        className="text-stone-400 hover:text-red-600 font-bold ml-0.5 text-xs p-0.5 transition cursor-pointer"
+                        title={`Delete category "${cat}"`}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* Product Filters & Search */}
             <div className="flex flex-col sm:flex-row gap-2.5">
               <div className="relative flex-1">
@@ -2410,21 +2585,57 @@ export default function Admin() {
 
                 {/* Category */}
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-[#765442] mb-1">
-                    Category *
-                  </label>
-                  <select
-                    value={draft.category}
-                    onChange={(e) => setDraft({ ...draft, category: e.target.value })}
-                    className="w-full rounded-xl border border-[#8a614830] bg-white px-3.5 py-2.5 text-sm text-ink outline-clay shadow-2xs cursor-pointer"
-                  >
-                    <option value="Jar candle">Jar candle</option>
-                    <option value="Sculptural">Sculptural</option>
-                    <option value="Flower candle">Flower candle</option>
-                    <option value="Tin candle">Tin candle</option>
-                    <option value="Wax melts">Wax melts</option>
-                    <option value="Aromatherapy">Aromatherapy</option>
-                  </select>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-bold uppercase tracking-wider text-[#765442]">
+                      Category *
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsCustomCategoryDraft(!isCustomCategoryDraft);
+                        if (!isCustomCategoryDraft) {
+                          setDraft((d) => ({ ...d, category: "" }));
+                        } else {
+                          setDraft((d) => ({ ...d, category: allCategoriesList[0] || "Jar candle" }));
+                        }
+                      }}
+                      className="text-xs text-clay font-bold underline cursor-pointer hover:text-ink"
+                    >
+                      {isCustomCategoryDraft ? "← Select Existing" : "+ Add New Category"}
+                    </button>
+                  </div>
+
+                  {isCustomCategoryDraft ? (
+                    <input
+                      required
+                      type="text"
+                      value={draft.category}
+                      onChange={(e) => setDraft({ ...draft, category: e.target.value })}
+                      placeholder="Type custom category (e.g. Gift Hampers)..."
+                      className="w-full rounded-xl border-2 border-clay bg-white px-3.5 py-2.5 text-sm text-ink outline-clay shadow-2xs font-semibold"
+                      autoFocus
+                    />
+                  ) : (
+                    <select
+                      value={draft.category}
+                      onChange={(e) => {
+                        if (e.target.value === "__NEW__") {
+                          setIsCustomCategoryDraft(true);
+                          setDraft({ ...draft, category: "" });
+                        } else {
+                          setDraft({ ...draft, category: e.target.value });
+                        }
+                      }}
+                      className="w-full rounded-xl border border-[#8a614830] bg-white px-3.5 py-2.5 text-sm text-ink outline-clay shadow-2xs cursor-pointer font-medium"
+                    >
+                      {allCategoriesList.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                      <option value="__NEW__">+ Add new category...</option>
+                    </select>
+                  )}
                 </div>
 
                 {/* Tickable Specifications */}
@@ -2742,21 +2953,57 @@ export default function Admin() {
 
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-[#765442] mb-1">
-                      Category
-                    </label>
-                    <select
-                      value={editForm.category}
-                      onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
-                      className="w-full rounded-xl border border-[#8a614830] bg-white px-3.5 py-2.5 text-sm text-ink outline-clay shadow-2xs"
-                    >
-                      <option value="Jar candle">Jar candle</option>
-                      <option value="Sculptural">Sculptural</option>
-                      <option value="Flower candle">Flower candle</option>
-                      <option value="Tin candle">Tin candle</option>
-                      <option value="Wax melts">Wax melts</option>
-                      <option value="Aromatherapy">Aromatherapy</option>
-                    </select>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-bold uppercase tracking-wider text-[#765442]">
+                        Category
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsCustomCategoryEdit(!isCustomCategoryEdit);
+                          if (!isCustomCategoryEdit) {
+                            setEditForm((f) => ({ ...f, category: "" }));
+                          } else {
+                            setEditForm((f) => ({ ...f, category: allCategoriesList[0] || "Jar candle" }));
+                          }
+                        }}
+                        className="text-xs text-clay font-bold underline cursor-pointer hover:text-ink"
+                      >
+                        {isCustomCategoryEdit ? "← Select Existing" : "+ New Category"}
+                      </button>
+                    </div>
+
+                    {isCustomCategoryEdit ? (
+                      <input
+                        required
+                        type="text"
+                        value={editForm.category}
+                        onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
+                        placeholder="Type new category name..."
+                        className="w-full rounded-xl border-2 border-clay bg-white px-3.5 py-2.5 text-sm text-ink outline-clay shadow-2xs font-semibold"
+                        autoFocus
+                      />
+                    ) : (
+                      <select
+                        value={editForm.category}
+                        onChange={(e) => {
+                          if (e.target.value === "__NEW__") {
+                            setIsCustomCategoryEdit(true);
+                            setEditForm({ ...editForm, category: "" });
+                          } else {
+                            setEditForm({ ...editForm, category: e.target.value });
+                          }
+                        }}
+                        className="w-full rounded-xl border border-[#8a614830] bg-white px-3.5 py-2.5 text-sm text-ink outline-clay shadow-2xs font-medium cursor-pointer"
+                      >
+                        {allCategoriesList.map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                        <option value="__NEW__">+ Add new category...</option>
+                      </select>
+                    )}
                   </div>
 
                   <div>

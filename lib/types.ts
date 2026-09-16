@@ -32,4 +32,9 @@ export type Order = {
   screenshotExpiresAt?: string;
   createdAt: string;
 };
-export type Store = { products: Product[]; orders: Order[]; settings: { upiId: string; adminPasswordHash: string } };
+export type Store = {
+  products: Product[];
+  orders: Order[];
+  categories?: string[];
+  settings: { upiId: string; adminPasswordHash: string };
+};

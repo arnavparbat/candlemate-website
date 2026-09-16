@@ -2,23 +2,42 @@ import { Header } from "@/components/header";
 import { ProductCollection } from "@/components/product-collection";
 import { HeroCandle } from "@/components/hero-candle";
 import { getStore } from "@/lib/store";
-import { isSupabaseConfigured, fetchProductsFromSupabase } from "@/lib/supabase";
+import { isSupabaseConfigured, fetchProductsFromSupabase, fetchCategoriesFromSupabase } from "@/lib/supabase";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+const DEFAULT_CATEGORIES = [
+  "Jar candle",
+  "Sculptural",
+  "Flower candle",
+  "Tin candle",
+  "Wax melts",
+  "Aromatherapy",
+];
+
 export default async function Home() {
-  let products = getStore().products;
+  const store = getStore();
+  let products = store.products;
+  let categories = [...DEFAULT_CATEGORIES, ...(store.categories || [])];
 
   if (isSupabaseConfigured()) {
     try {
-      const cloudProducts = await fetchProductsFromSupabase();
+      const [cloudProducts, cloudCategories] = await Promise.all([
+        fetchProductsFromSupabase(),
+        fetchCategoriesFromSupabase(),
+      ]);
       if (cloudProducts && Array.isArray(cloudProducts) && cloudProducts.length > 0) {
         products = cloudProducts;
       }
+      if (cloudCategories && Array.isArray(cloudCategories) && cloudCategories.length > 0) {
+        categories = [...categories, ...cloudCategories];
+      }
     } catch {}
   }
+
+  const uniqueCategories = Array.from(new Set(categories.map((c) => c.trim()).filter(Boolean)));
 
   return (
     <>
@@ -73,7 +92,7 @@ export default async function Home() {
             </p>
           </div>
 
-          <ProductCollection initialProducts={products} />
+          <ProductCollection initialProducts={products} initialCategories={uniqueCategories} />
         </section>
       </main>
       <footer className="border-t border-[#5c39271a] bg-[#fffaf3] px-5 py-10 sm:py-12 text-center text-xs sm:text-sm text-[#765442]">
