@@ -46,15 +46,15 @@ export function Header() {
             Shop candles
           </a>
 
-          {/* Track order: Sleek icon button on mobile, icon + text on desktop */}
+          {/* Track order: Compact clickable pill with icon + "Track" visible clearly on mobile */}
           <Link
             href="/track"
-            className="flex h-9 w-9 sm:h-auto sm:w-auto items-center justify-center gap-1.5 rounded-full border border-[#8a614825] sm:border-0 hover:bg-[#8a614815] text-ink/85 hover:text-clay transition text-xs sm:text-sm sm:px-2.5 sm:py-1.5 shrink-0"
+            className="flex items-center justify-center gap-1 sm:gap-1.5 rounded-full border border-[#8a614830] bg-[#fffaf3] sm:bg-transparent px-2.5 py-1.5 sm:px-3 sm:py-1.5 hover:bg-[#8a614815] text-ink/90 hover:text-clay transition text-[11px] sm:text-sm shrink-0 shadow-2xs sm:shadow-none active:scale-95"
             title="Track your order status"
             aria-label="Track order"
           >
             <svg
-              className="h-4 w-4 text-clay shrink-0"
+              className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-clay shrink-0"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -66,7 +66,7 @@ export function Header() {
                 d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
               />
             </svg>
-            <span className="hidden sm:inline font-medium">Track order</span>
+            <span className="font-semibold text-ink/90">Track</span>
           </Link>
 
           {/* Bag button with shake / vibration animation */}

@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,400;1,500&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -7,6 +9,7 @@ html { scroll-behavior: smooth; }
 body { margin: 0; color: #2d1b16; background: #fff8ed; font-family: Arial, Helvetica, sans-serif; }
 button, input, textarea, select { font: inherit; }
 .display { font-family: Georgia, 'Times New Roman', serif; letter-spacing: -.045em; }
+.font-relaxing { font-family: 'Cormorant Garamond', Georgia, 'Palatino Linotype', Palatino, serif; letter-spacing: -0.01em; }
 .paper { background: rgba(255,255,255,.74); border: 1px solid rgba(104,66,43,.14); box-shadow: 0 18px 60px rgba(68,35,20,.10); }
 .grain { background-image: radial-gradient(rgba(100,55,25,.11) .6px, transparent .6px); background-size: 5px 5px; }
 .candle-glow { filter: drop-shadow(0 0 22px rgba(236,163,63,.42)); }

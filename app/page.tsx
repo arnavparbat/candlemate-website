@@ -43,40 +43,20 @@ export default async function Home() {
     <>
       <Header />
       <main>
-        {/* Compact Hero Section: Takes only ~1/3 of the tab on mobile */}
-        <section className="grain overflow-hidden border-b border-[#5c39271a]">
-          <div className="mx-auto grid max-w-6xl items-center gap-3 px-4 py-3 sm:gap-12 sm:px-5 sm:py-14 grid-cols-[1.2fr_.8fr] md:grid-cols-[1.1fr_.9fr]">
-            <div>
-              <div className="mb-2 sm:mb-4 flex items-center gap-2">
-                <img src="/logo-emblem.png" alt="Candlemate Emblem" className="h-6 w-auto sm:h-7 object-contain opacity-90" />
-                <p className="text-[10px] sm:text-xs font-bold uppercase tracking-[.2em] text-clay">
-                  Hand-poured in small batches
-                </p>
-              </div>
-              <h1 className="display max-w-xl text-2xl sm:text-6xl sm:leading-[.92] leading-tight text-ink">
-                Light a little <i className="font-normal text-clay">slower.</i>
+        {/* Serene & Minimalist Hero Section: Perfectly aligned thought and living flame candle */}
+        <section className="grain overflow-hidden border-b border-[#5c39271a] py-4 sm:py-12">
+          <div className="mx-auto grid max-w-5xl items-center gap-3 px-4 sm:gap-8 sm:px-6 grid-cols-[1.15fr_.85fr] sm:grid-cols-2">
+            <div className="flex flex-col justify-center pr-1 sm:pr-0">
+              <h1 className="font-relaxing italic text-2xl xs:text-3xl sm:text-5xl md:text-6xl font-normal text-ink leading-[1.08] tracking-tight">
+                Light a little{" "}
+                <span className="text-clay not-italic font-medium">slower.</span>
               </h1>
-              <p className="mt-1 sm:mt-7 max-w-md text-xs sm:text-base sm:leading-7 text-[#765442] hidden xs:block">
-                Natural candles designed for evening rituals, unhurried conversations, and calm spaces.
-              </p>
-              <div className="mt-2.5 sm:mt-8 flex items-center gap-3 flex-wrap">
-                <a
-                  href="#shop"
-                  className="inline-block rounded-full bg-ink px-3.5 py-1.5 sm:px-7 sm:py-3 text-xs sm:text-sm text-cream transition hover:bg-clay"
-                >
-                  Find your scent
-                </a>
-                <Link
-                  href="/track"
-                  className="sm:hidden inline-flex items-center gap-1 text-xs text-clay font-medium underline py-1"
-                >
-                  Track order →
-                </Link>
-              </div>
             </div>
 
-            {/* Candlemate Artisanal Logo Candles with living flame and playful wink */}
-            <HeroCandle />
+            {/* Candlemate Artisanal Candle with living flame and gentle wink */}
+            <div className="flex items-center justify-center">
+              <HeroCandle />
+            </div>
           </div>
         </section>
 
