@@ -49,6 +49,14 @@ function fileToOptimizedDataUrl(file: File, maxDim = 1200, quality = 0.85): Prom
   });
 }
 
+function WhatsAppIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} fill="currentColor" viewBox="0 0 24 24">
+      <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z" />
+    </svg>
+  );
+}
+
 export default function Admin() {
   // Navigation tabs: 'orders' | 'products' | 'settings'
   const [activeTab, setActiveTab] = useState<"orders" | "products" | "settings">("orders");
@@ -189,7 +197,44 @@ export default function Admin() {
   const [isCustomCategoryDraft, setIsCustomCategoryDraft] = useState(false);
   const [isCustomCategoryEdit, setIsCustomCategoryEdit] = useState(false);
 
+  // WhatsApp Group Marketing States
+  const [marketingTarget, setMarketingTarget] = useState<{
+    type: "product" | "collection";
+    product?: Product;
+    category?: string;
+  } | null>(null);
+  const [marketingCustomText, setMarketingCustomText] = useState<string>("");
+  const [isSharingMarketingPhotos, setIsSharingMarketingPhotos] = useState(false);
+  const [copiedMarketingStatus, setCopiedMarketingStatus] = useState<string | null>(null);
+
   const orderCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  // Memoized images for WhatsApp marketing modal
+  const marketingTargetImages = useMemo(() => {
+    if (!marketingTarget) return [];
+    if (marketingTarget.type === "product" && marketingTarget.product) {
+      return Array.isArray(marketingTarget.product.images)
+        ? marketingTarget.product.images.filter(Boolean)
+        : [];
+    }
+    if (marketingTarget.type === "collection" && marketingTarget.category) {
+      const col = products.filter(
+        (p) =>
+          p.category &&
+          p.category.trim().toLowerCase() === marketingTarget.category!.trim().toLowerCase()
+      );
+      const imgs: string[] = [];
+      col.forEach((p) => {
+        if (Array.isArray(p.images)) {
+          p.images.forEach((img) => {
+            if (img && !imgs.includes(img)) imgs.push(img);
+          });
+        }
+      });
+      return imgs;
+    }
+    return [];
+  }, [marketingTarget, products]);
 
   // ----------------------------------------------------
   // Audio & Push Notification Helper
@@ -402,6 +447,229 @@ export default function Admin() {
     const phoneWithCountry = cleanPhone.startsWith("91") ? cleanPhone : `91${cleanPhone}`;
     const msg = `Hi ${order.customer.name}! Candlemate studio here regarding your order #${order.id} (₹${order.total}). We are handcrafting your candles with natural soy wax. 🕯️✨`;
     return `https://wa.me/${phoneWithCountry}?text=${encodeURIComponent(msg)}`;
+  }
+
+  // ----------------------------------------------------
+  // WhatsApp Marketing Generators & Handlers
+  // Note: Prices are strictly omitted from marketing messages as requested
+  // ----------------------------------------------------
+  function getSiteOrigin(): string {
+    if (typeof window !== "undefined" && window.location?.origin) {
+      return window.location.origin;
+    }
+    return "https://candlemate.pages.dev";
+  }
+
+  function generateProductMarketingText(prod: Product): string {
+    const origin = getSiteOrigin();
+    const productUrl = `${origin}/products/${encodeURIComponent(prod.id)}`;
+
+    const lines: string[] = [
+      `✨ *CANDLEMATE ARTISANAL STUDIO* ✨`,
+      `🕯️ *${prod.name.trim()}*`,
+      ``,
+    ];
+
+    if (prod.description && prod.description.trim()) {
+      lines.push(`_${prod.description.trim()}_`, ``);
+    }
+
+    const specs: string[] = [];
+    if (prod.category && prod.category.trim()) {
+      specs.push(`🏷️ *Collection:* ${prod.category.trim()}`);
+    }
+    if (prod.fragrance && prod.fragrance.trim()) {
+      specs.push(`🌸 *Fragrance Notes:* ${prod.fragrance.trim()}`);
+    }
+    if (prod.burnTime && prod.burnTime.trim()) {
+      specs.push(`⏳ *Burn Time:* ${prod.burnTime.trim()}`);
+    }
+    if (prod.ingredients && prod.ingredients.trim()) {
+      specs.push(`🌿 *Wax Blend:* ${prod.ingredients.trim()}`);
+    }
+    if (prod.candleDimensions && prod.candleDimensions.trim()) {
+      specs.push(`📏 *Dimensions:* ${prod.candleDimensions.trim()}`);
+    }
+    if (prod.wickSize && prod.wickSize.trim()) {
+      specs.push(`🕯️ *Wick:* ${prod.wickSize.trim()}`);
+    }
+
+    if (specs.length > 0) {
+      lines.push(...specs, ``);
+    }
+
+    lines.push(
+      prod.available !== false
+        ? `✨ *Availability:* In Stock (Handcrafted Batch)`
+        : `⏳ *Availability:* Handcrafted on Request`,
+      ``,
+      `🛍️ *View candle photos & order online:*`,
+      `👉 ${productUrl}`,
+      ``,
+      `💬 _Reply directly to this message to order or customize your candle!_`,
+      `✨ Handcrafted with pure plant soy wax by Candlemate Studio.`
+    );
+
+    return lines.join("\n");
+  }
+
+  function generateCollectionMarketingText(catName: string): string {
+    const origin = getSiteOrigin();
+    const collectionUrl = `${origin}/?category=${encodeURIComponent(catName)}#shop`;
+    const colProds = products.filter(
+      (p) => p.category && p.category.trim().toLowerCase() === catName.trim().toLowerCase()
+    );
+
+    const lines: string[] = [
+      `✨ *CANDLEMATE HANDCRAFTED COLLECTION* ✨`,
+      `🌿 *${catName.toUpperCase()} COLLECTION* 🕯️`,
+      ``,
+      `Discover our curated artisanal candles in the *${catName}* collection, hand-poured with 100% pure plant soy wax and soothing fragrances:`,
+      ``,
+    ];
+
+    if (colProds.length > 0) {
+      colProds.forEach((p) => {
+        const pUrl = `${origin}/products/${encodeURIComponent(p.id)}`;
+        let line = `• *${p.name.trim()}*`;
+        const extras: string[] = [];
+        if (p.fragrance) extras.push(`🌸 ${p.fragrance.trim()}`);
+        if (p.burnTime) extras.push(`⏳ ${p.burnTime.trim()}`);
+        if (extras.length > 0) {
+          line += ` (${extras.join(" · ")})`;
+        }
+        lines.push(line);
+        lines.push(`  🔗 ${pUrl}`);
+      });
+      lines.push(``);
+    }
+
+    lines.push(
+      `🛍️ *Browse the Entire Collection Online:*`,
+      `👉 ${collectionUrl}`,
+      ``,
+      `💬 _Reply to this message or visit our website to place your order!_`,
+      `✨ Clean-burning · Natural Plant Wax · Hand-Poured with Care`
+    );
+
+    return lines.join("\n");
+  }
+
+  function openWhatsAppForMarketing(text: string) {
+    const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+    window.open(waUrl, "_blank", "noopener,noreferrer");
+  }
+
+  async function shareMarketingToWhatsAppWithPhotos(title: string, text: string, imageUrls: string[]) {
+    if (typeof navigator === "undefined" || !navigator.share) {
+      setNotice("Web Share API is not supported on this browser. Opening WhatsApp directly.");
+      openWhatsAppForMarketing(text);
+      return;
+    }
+
+    setIsSharingMarketingPhotos(true);
+    setNotice("Preparing candle photos for WhatsApp share...");
+
+    try {
+      const files: File[] = [];
+      const imagesToFetch = imageUrls.slice(0, 5);
+
+      for (let i = 0; i < imagesToFetch.length; i++) {
+        const url = imagesToFetch[i];
+        try {
+          const res = await fetch(url);
+          const blob = await res.blob();
+          const ext = blob.type.includes("png") ? "png" : "jpg";
+          const file = new File([blob], `candlemate-${i + 1}.${ext}`, {
+            type: blob.type || "image/jpeg",
+          });
+          files.push(file);
+        } catch (fetchErr) {
+          console.warn("Could not convert image to file:", fetchErr);
+        }
+      }
+
+      if (files.length > 0 && navigator.canShare && navigator.canShare({ files })) {
+        await navigator.share({
+          title,
+          text,
+          files,
+        });
+        setNotice("✓ Shared successfully to WhatsApp!");
+      } else {
+        await navigator.share({
+          title,
+          text,
+        });
+        setNotice("✓ Opened share dialog!");
+      }
+    } catch (err: any) {
+      if (err.name !== "AbortError") {
+        console.warn("Share failed, falling back to WhatsApp link:", err);
+        openWhatsAppForMarketing(text);
+      }
+    } finally {
+      setIsSharingMarketingPhotos(false);
+    }
+  }
+
+  function downloadAllMarketingImages(imageUrls: string[], baseName: string) {
+    if (!imageUrls.length) {
+      setNotice("No images found to download.");
+      return;
+    }
+    imageUrls.forEach((url, idx) => {
+      setTimeout(() => {
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${baseName.toLowerCase().replace(/[^a-z0-9]/g, "-")}-photo-${idx + 1}.jpg`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }, idx * 250);
+    });
+    setNotice(`✓ Downloading ${imageUrls.length} candle photo(s)...`);
+  }
+
+  async function copyMarketingImageToClipboard(imageUrl: string) {
+    try {
+      const res = await fetch(imageUrl);
+      const blob = await res.blob();
+
+      const img = new window.Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          setNotice("Failed to copy image to clipboard.");
+          return;
+        }
+        ctx.drawImage(img, 0, 0);
+        canvas.toBlob(async (pngBlob) => {
+          if (pngBlob) {
+            try {
+              await navigator.clipboard.write([
+                new ClipboardItem({ "image/png": pngBlob }),
+              ]);
+              setCopiedMarketingStatus("photo");
+              setNotice("✓ Candle photo copied to clipboard! You can paste (Ctrl+V) directly into WhatsApp.");
+              setTimeout(() => setCopiedMarketingStatus(null), 3500);
+            } catch {
+              setNotice("Could not write photo to clipboard.");
+            }
+          }
+        }, "image/png");
+      };
+      img.onerror = () => {
+        setNotice("Could not load image to copy.");
+      };
+      img.src = imageUrl;
+    } catch {
+      setNotice("Could not load image to copy.");
+    }
   }
 
   // ----------------------------------------------------
@@ -2201,15 +2469,33 @@ export default function Admin() {
                 </p>
               </div>
 
-              {/* Direct Add Product Button */}
-              <button
-                type="button"
-                onClick={() => setIsAddModalOpen(true)}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-ink hover:bg-clay text-white px-5 py-2.5 text-sm font-bold shadow-sm transition active:scale-95 cursor-pointer shrink-0"
-              >
-                <span className="text-lg leading-none">+</span>
-                <span>Add New Candle</span>
-              </button>
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Market Collections Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const firstCat = allCategoriesList[0] || "Jar candle";
+                    const text = generateCollectionMarketingText(firstCat);
+                    setMarketingCustomText(text);
+                    setMarketingTarget({ type: "collection", category: firstCat });
+                  }}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#25D366] hover:bg-[#1EBE5D] text-white px-4 py-2.5 text-xs sm:text-sm font-bold shadow-sm transition active:scale-95 cursor-pointer shrink-0"
+                  title="Market candle collections to WhatsApp group"
+                >
+                  <WhatsAppIcon className="w-4 h-4" />
+                  <span>Market Collection</span>
+                </button>
+
+                {/* Direct Add Product Button */}
+                <button
+                  type="button"
+                  onClick={() => setIsAddModalOpen(true)}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-ink hover:bg-clay text-white px-5 py-2.5 text-sm font-bold shadow-sm transition active:scale-95 cursor-pointer shrink-0"
+                >
+                  <span className="text-lg leading-none">+</span>
+                  <span>Add New Candle</span>
+                </button>
+              </div>
             </div>
 
             {/* Category Manager Card */}
@@ -2258,12 +2544,25 @@ export default function Admin() {
                   return (
                     <div
                       key={cat}
-                      className="shrink-0 inline-flex items-center gap-1.5 rounded-full bg-[#f6ece1] border border-[#8a614825] px-3 py-1 text-xs font-bold text-ink shadow-2xs"
+                      className="shrink-0 inline-flex items-center gap-1.5 rounded-full bg-[#f6ece1] border border-[#8a614825] pl-3 pr-1.5 py-1 text-xs font-bold text-ink shadow-2xs"
                     >
                       <span>{cat}</span>
                       <span className="rounded-full bg-white px-1.5 py-0.2 text-[10px] font-mono font-black text-clay">
                         {count}
                       </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const text = generateCollectionMarketingText(cat);
+                          setMarketingCustomText(text);
+                          setMarketingTarget({ type: "collection", category: cat });
+                        }}
+                        className="inline-flex items-center gap-1 rounded-full bg-[#25D366] text-white hover:bg-[#1EBE5D] px-2 py-0.5 text-[10px] font-bold transition active:scale-95 cursor-pointer ml-0.5 shadow-2xs"
+                        title={`Market "${cat}" collection to WhatsApp group`}
+                      >
+                        <WhatsAppIcon className="w-2.5 h-2.5" />
+                        <span>Market</span>
+                      </button>
                       <button
                         type="button"
                         onClick={() => handleDeleteCategory(cat)}
@@ -2363,11 +2662,11 @@ export default function Admin() {
                   </div>
 
                   {/* Actions footer */}
-                  <div className="mt-3.5 pt-2.5 border-t border-[#8a614815] flex items-center justify-between gap-2">
+                  <div className="mt-3.5 pt-2.5 border-t border-[#8a614815] flex items-center justify-between gap-2 flex-wrap sm:flex-nowrap">
                     <button
                       type="button"
                       onClick={() => updateProduct(p, { available: !p.available })}
-                      className={`rounded-xl px-3 py-1.5 text-xs font-bold transition active:scale-95 cursor-pointer shadow-2xs ${
+                      className={`rounded-xl px-2.5 sm:px-3 py-1.5 text-xs font-bold transition active:scale-95 cursor-pointer shadow-2xs shrink-0 ${
                         p.available !== false
                           ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
                           : "bg-stone-100 text-stone-600 border border-stone-300"
@@ -2379,8 +2678,22 @@ export default function Admin() {
                     <div className="flex items-center gap-1.5">
                       <button
                         type="button"
+                        onClick={() => {
+                          const text = generateProductMarketingText(p);
+                          setMarketingCustomText(text);
+                          setMarketingTarget({ type: "product", product: p });
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-[#25D366] hover:bg-[#1EBE5D] text-white px-2.5 sm:px-3 py-1.5 text-xs font-bold transition active:scale-95 shadow-2xs cursor-pointer"
+                        title="Market candle to WhatsApp group (no price, with photos & link)"
+                      >
+                        <WhatsAppIcon className="w-3.5 h-3.5" />
+                        <span>WhatsApp</span>
+                      </button>
+
+                      <button
+                        type="button"
                         onClick={() => startEditingProduct(p)}
-                        className="rounded-xl bg-ink text-white px-3 py-1.5 text-xs font-bold hover:bg-clay transition active:scale-95 shadow-2xs"
+                        className="rounded-xl bg-ink text-white px-2.5 sm:px-3 py-1.5 text-xs font-bold hover:bg-clay transition active:scale-95 shadow-2xs cursor-pointer"
                       >
                         Edit
                       </button>
@@ -2388,7 +2701,7 @@ export default function Admin() {
                       <button
                         type="button"
                         onClick={() => remove(p.id)}
-                        className="rounded-xl border border-red-200 text-red-700 hover:bg-red-50 px-2.5 py-1.5 text-xs font-semibold transition active:scale-95"
+                        className="rounded-xl border border-red-200 text-red-700 hover:bg-red-50 px-2 sm:px-2.5 py-1.5 text-xs font-semibold transition active:scale-95 cursor-pointer"
                       >
                         Delete
                       </button>
@@ -3374,6 +3687,263 @@ export default function Admin() {
                   type="button"
                   onClick={() => setSelectedScreenshotOrder(null)}
                   className="rounded-xl border border-[#8a614830] bg-white px-4 py-1.5 text-xs font-bold text-ink"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================================================== */}
+      {/* 8. WHATSAPP MARKETING MODAL                          */}
+      {/* ==================================================== */}
+      {marketingTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-2 sm:p-4 backdrop-blur-sm overflow-y-auto"
+          onClick={() => {
+            setMarketingTarget(null);
+            setMarketingCustomText("");
+            setCopiedMarketingStatus(null);
+          }}
+        >
+          <div
+            className="relative flex max-h-[96vh] sm:max-h-[92vh] w-full max-w-2xl flex-col rounded-3xl bg-[#fff8ed] shadow-2xl border border-[#8a61483a] overflow-hidden my-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-[#8a614820] bg-[#f5ede0] px-4 sm:px-6 py-3.5">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-[#25D366] text-white shadow-xs shrink-0">
+                  <WhatsAppIcon className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="display text-base sm:text-lg font-bold text-ink truncate max-w-[280px] sm:max-w-md">
+                      {marketingTarget.type === "product"
+                        ? `Market Candle: ${marketingTarget.product?.name}`
+                        : `Market Collection: ${marketingTarget.category}`}
+                    </h3>
+                    <span className="rounded-full bg-[#25D366]/15 text-[#168a3e] px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide shrink-0">
+                      WhatsApp Ready
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-[#765442]">
+                    Formatted for WhatsApp marketing groups · Direct link included · No prices shown
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setMarketingTarget(null);
+                  setMarketingCustomText("");
+                  setCopiedMarketingStatus(null);
+                }}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-base font-bold text-[#765442] hover:bg-clay hover:text-white transition shadow-xs cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Scrollable Content */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+              {/* Marketing Mode Badge / Price Notice */}
+              <div className="flex items-start gap-2.5 rounded-2xl bg-emerald-50/80 border border-emerald-200/80 p-3 text-xs text-emerald-950 shadow-2xs">
+                <span className="text-base shrink-0">🔒</span>
+                <div className="flex-1">
+                  <p className="font-bold">Group Marketing Mode (Price Omitted)</p>
+                  <p className="text-[11px] text-emerald-900/90 mt-0.5 leading-relaxed">
+                    As requested, candle prices are not included in this marketing message. Group members are encouraged to click the direct product/collection store link or message you directly.
+                  </p>
+                </div>
+              </div>
+
+              {/* If collection mode, allow switching collection on the fly */}
+              {marketingTarget.type === "collection" && (
+                <div className="flex items-center justify-between bg-white rounded-2xl border border-[#8a614820] p-3">
+                  <div>
+                    <label className="text-xs font-bold text-ink block">Selected Collection</label>
+                    <p className="text-[11px] text-[#765442]">Switch collection to generate matching message</p>
+                  </div>
+                  <select
+                    value={marketingTarget.category}
+                    onChange={(e) => {
+                      const newCat = e.target.value;
+                      const newText = generateCollectionMarketingText(newCat);
+                      setMarketingCustomText(newText);
+                      setMarketingTarget({ type: "collection", category: newCat });
+                    }}
+                    className="rounded-xl border border-[#8a614830] bg-[#fff8ed] px-3 py-1.5 text-xs font-bold text-ink outline-clay shadow-2xs cursor-pointer"
+                  >
+                    {allCategoriesList.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Candle Photos Gallery */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-[#765442] flex items-center gap-1.5">
+                    <span>🖼️</span> Candle Photos ({marketingTargetImages.length})
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    {marketingTargetImages.length > 0 && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => copyMarketingImageToClipboard(marketingTargetImages[0])}
+                          className="rounded-lg bg-white border border-[#8a614830] px-2.5 py-1 text-[11px] font-bold text-[#765442] hover:text-ink hover:border-clay transition active:scale-95 shadow-2xs cursor-pointer"
+                          title="Copy primary photo to clipboard so you can paste (Ctrl+V) into WhatsApp"
+                        >
+                          {copiedMarketingStatus === "photo" ? "✓ Photo Copied!" : "📋 Copy 1st Photo"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            downloadAllMarketingImages(
+                              marketingTargetImages,
+                              marketingTarget.type === "product"
+                                ? marketingTarget.product?.name || "candle"
+                                : marketingTarget.category || "collection"
+                            )
+                          }
+                          className="rounded-lg bg-white border border-[#8a614830] px-2.5 py-1 text-[11px] font-bold text-[#765442] hover:text-ink hover:border-clay transition active:scale-95 shadow-2xs cursor-pointer"
+                        >
+                          📥 Download All ({marketingTargetImages.length})
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {marketingTargetImages.length > 0 ? (
+                  <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 rounded-2xl bg-white border border-[#8a614820] p-2.5">
+                    {marketingTargetImages.map((imgUrl, i) => (
+                      <div
+                        key={i}
+                        className="relative group aspect-square rounded-xl overflow-hidden bg-stone-100 border border-[#8a614815]"
+                      >
+                        <img
+                          src={imgUrl}
+                          alt={`Candle preview ${i + 1}`}
+                          className="h-full w-full object-cover group-hover:scale-105 transition duration-200"
+                        />
+                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => copyMarketingImageToClipboard(imgUrl)}
+                            className="p-1.5 rounded-md bg-white text-ink text-xs font-bold hover:bg-stone-100 cursor-pointer"
+                            title="Copy photo to clipboard"
+                          >
+                            📋
+                          </button>
+                          <a
+                            href={imgUrl}
+                            download={`candlemate-photo-${i + 1}.jpg`}
+                            className="p-1.5 rounded-md bg-white text-ink text-xs font-bold hover:bg-stone-100 cursor-pointer"
+                            title="Download photo"
+                          >
+                            ↓
+                          </a>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-2xl bg-stone-50 border border-stone-200 p-4 text-center text-xs text-stone-500">
+                    No candle photos available. Add photos to this candle to share visually.
+                  </div>
+                )}
+              </div>
+
+              {/* Message Preview & Customizer */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wider text-[#765442] flex items-center gap-1.5">
+                    <span>💬</span> WhatsApp Message Text
+                  </label>
+                  <span className="text-[11px] text-[#765442]/70 font-mono">
+                    {marketingCustomText.length} characters
+                  </span>
+                </div>
+
+                <div className="relative">
+                  <textarea
+                    rows={10}
+                    value={marketingCustomText}
+                    onChange={(e) => setMarketingCustomText(e.target.value)}
+                    className="w-full rounded-2xl border border-[#8a614830] bg-[#fdfaf7] p-3.5 text-xs sm:text-sm text-ink font-mono leading-relaxed outline-clay shadow-2xs resize-y"
+                    placeholder="Type or customize your WhatsApp marketing broadcast..."
+                  />
+                </div>
+                <p className="text-[11px] text-[#765442]/80 mt-1">
+                  Tip: Direct link is included. Asterisks (*bold*) and underscores (_italic_) are formatted for WhatsApp.
+                </p>
+              </div>
+            </div>
+
+            {/* Action Footer */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-t border-[#8a614820] bg-[#f5ede0] px-4 sm:px-6 py-3.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Primary WhatsApp Action */}
+                <button
+                  type="button"
+                  onClick={() => openWhatsAppForMarketing(marketingCustomText)}
+                  className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 rounded-2xl bg-[#25D366] hover:bg-[#1EBE5D] text-white px-5 py-2.5 text-xs sm:text-sm font-bold shadow-sm transition active:scale-95 cursor-pointer"
+                >
+                  <WhatsAppIcon className="w-4 h-4" />
+                  <span>Send to WhatsApp Group</span>
+                </button>
+
+                {/* Mobile / Web Share with Photos */}
+                <button
+                  type="button"
+                  disabled={isSharingMarketingPhotos || marketingTargetImages.length === 0}
+                  onClick={() =>
+                    shareMarketingToWhatsAppWithPhotos(
+                      marketingTarget.type === "product"
+                        ? `Candlemate: ${marketingTarget.product?.name}`
+                        : `Candlemate: ${marketingTarget.category} Collection`,
+                      marketingCustomText,
+                      marketingTargetImages
+                    )
+                  }
+                  className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 rounded-2xl bg-[#1d5b34] hover:bg-[#154627] text-white px-4 py-2.5 text-xs sm:text-sm font-bold shadow-sm transition active:scale-95 disabled:opacity-50 cursor-pointer"
+                  title="Attach candle photos directly to WhatsApp using device share sheet"
+                >
+                  <span>📱</span>
+                  <span>{isSharingMarketingPhotos ? "Attaching Photos..." : "Share with Photos"}</span>
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2 justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    copyToClipboard(marketingCustomText, "Marketing Message");
+                    setCopiedMarketingStatus("text");
+                    setTimeout(() => setCopiedMarketingStatus(null), 3000);
+                  }}
+                  className="rounded-xl border border-[#8a614830] bg-white hover:bg-stone-50 text-ink px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-bold transition active:scale-95 shadow-2xs cursor-pointer"
+                >
+                  {copiedMarketingStatus === "text" ? "✓ Text Copied!" : "📋 Copy Text"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMarketingTarget(null);
+                    setMarketingCustomText("");
+                    setCopiedMarketingStatus(null);
+                  }}
+                  className="rounded-xl border border-[#8a614830] bg-transparent hover:bg-black/5 text-[#765442] px-3.5 py-2 text-xs sm:text-sm font-bold transition cursor-pointer"
                 >
                   Close
                 </button>

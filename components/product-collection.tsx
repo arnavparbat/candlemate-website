@@ -31,6 +31,23 @@ export function ProductCollection({
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
 
+  // Sync category from URL query parameters (e.g. ?category=Sculptural#shop)
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const catParam = params.get("category");
+      if (catParam) {
+        setSelectedCategory(catParam);
+        setTimeout(() => {
+          const shopEl = document.getElementById("shop");
+          if (shopEl) {
+            shopEl.scrollIntoView({ behavior: "smooth" });
+          }
+        }, 150);
+      }
+    }
+  }, []);
+
   // Touch Swipe Gesture tracking
   const touchStartPos = useRef<{ x: number; y: number } | null>(null);
 
