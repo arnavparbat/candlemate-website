@@ -46,30 +46,30 @@ export function Header() {
           <button
             type="button"
             onClick={handleOpenCollections}
-            className="group flex items-center justify-center rounded-full bg-[#fceddc] hover:bg-[#f7dfc8] active:bg-[#ecd0b4] border-[1.5px] border-[#8a5d43]/40 hover:border-clay text-ink px-2.5 py-1 sm:px-3 sm:py-1.5 shadow-[0_1px_3px_rgba(45,27,22,0.12)] hover:shadow-[0_2px_6px_rgba(174,99,62,0.22)] active:scale-90 transition-all duration-200 cursor-pointer select-none touch-manipulation shrink-0"
+            className="group flex items-center justify-center rounded-full bg-[#fceddc] hover:bg-[#f7dfc8] active:bg-[#ecd0b4] border-[1.5px] border-[#8a5d43]/40 hover:border-clay text-ink px-3.5 py-2 sm:px-4 sm:py-2.5 shadow-[0_1.5px_4px_rgba(45,27,22,0.12)] hover:shadow-[0_2px_8px_rgba(174,99,62,0.22)] active:scale-92 transition-all duration-200 cursor-pointer select-none touch-manipulation shrink-0"
             title="Browse Collections"
             aria-label="Browse Collections"
           >
-            <div className="relative w-[22px] h-[14px] sm:w-[24px] sm:h-[15px] flex items-center justify-center overflow-hidden">
+            <div className="relative w-[26px] h-[19px] sm:w-[28px] sm:h-[21px] flex items-center justify-center overflow-hidden">
               <svg
-                viewBox="0 0 24 18"
+                viewBox="0 0 26 22"
                 className="w-full h-full overflow-hidden text-ink group-hover:text-clay transition-colors duration-300"
                 fill="none"
                 stroke="currentColor"
-                strokeWidth="2.2"
+                strokeWidth="2.4"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               >
                 <path
-                  d="M -12 3 Q -9 1.8, -6 3 T 0 3 T 6 3 T 12 3 T 18 3 T 24 3 T 30 3 T 36 3"
+                  d="M -12 4 Q -9 2.3, -6 4 T 0 4 T 6 4 T 12 4 T 18 4 T 24 4 T 30 4 T 36 4 T 42 4"
                   className="animate-ocean-wave-1"
                 />
                 <path
-                  d="M -12 9 Q -9 7.8, -6 9 T 0 9 T 6 9 T 12 9 T 18 9 T 24 9 T 30 9 T 36 9"
+                  d="M -12 11 Q -9 9.3, -6 11 T 0 11 T 6 11 T 12 11 T 18 11 T 24 11 T 30 11 T 36 11 T 42 11"
                   className="animate-ocean-wave-2"
                 />
                 <path
-                  d="M -12 15 Q -9 13.8, -6 15 T 0 15 T 6 15 T 12 15 T 18 15 T 24 15 T 30 15 T 36 15"
+                  d="M -12 18 Q -9 16.3, -6 18 T 0 18 T 6 18 T 12 18 T 18 18 T 24 18 T 30 18 T 36 18 T 42 18"
                   className="animate-ocean-wave-3"
                 />
               </svg>
