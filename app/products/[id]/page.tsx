@@ -136,9 +136,11 @@ export default function ProductPage() {
             <span>←</span>
             <span>Back to collection</span>
           </Link>
-          <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-clay bg-[#8a614815] px-2.5 py-0.5 rounded-full">
-            {product.category}
-          </span>
+          {product.category && (
+            <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-clay bg-[#8a614815] px-2.5 py-0.5 rounded-full">
+              {product.category}
+            </span>
+          )}
         </div>
 
         {/* ==================================================== */}
@@ -253,9 +255,11 @@ export default function ProductPage() {
             {/* Header: Title, Category, Price & Live Stock */}
             <div className="space-y-1 sm:space-y-2">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[10px] sm:text-xs font-bold uppercase tracking-[.18em] text-clay bg-[#8a614815] px-2.5 py-0.5 rounded-full">
-                  {product.category}
-                </span>
+                {product.category ? (
+                  <span className="text-[10px] sm:text-xs font-bold uppercase tracking-[.18em] text-clay bg-[#8a614815] px-2.5 py-0.5 rounded-full">
+                    {product.category}
+                  </span>
+                ) : <span />}
 
                 {/* Stock Indicator */}
                 <span className="inline-flex items-center gap-1 text-[11px] font-semibold">

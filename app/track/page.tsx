@@ -419,15 +419,15 @@ function TrackOrderContent() {
                       <p className="font-bold uppercase tracking-wider text-clay text-[11px]">Delivery Information</p>
                       <div>
                         <p className="text-[#765442]">Recipient Name:</p>
-                        <p className="font-semibold text-ink text-sm">{order.customer.name}</p>
+                        <p className="font-semibold text-ink text-sm">{order.customer?.name || "Customer"}</p>
                       </div>
                       <div>
                         <p className="text-[#765442]">Contact Phone:</p>
-                        <p className="font-medium text-ink">{order.customer.phone}</p>
+                        <p className="font-medium text-ink">{order.customer?.phone || "—"}</p>
                       </div>
                       <div>
                         <p className="text-[#765442]">Shipping Address:</p>
-                        <p className="font-medium text-ink whitespace-pre-line leading-relaxed">{order.customer.address}</p>
+                        <p className="font-medium text-ink whitespace-pre-line leading-relaxed">{order.customer?.address || "—"}</p>
                       </div>
                     </div>
 
@@ -438,7 +438,7 @@ function TrackOrderContent() {
                           Handcrafted Candles Ordered
                         </p>
                         <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                          {order.items.map((item, i) => (
+                          {(Array.isArray(order.items) ? order.items : []).map((item, i) => (
                             <div key={i} className="flex items-center justify-between gap-2 border-b border-[#8a614810] pb-2 last:border-0 last:pb-0">
                               <div className="flex items-center gap-2.5 min-w-0">
                                 {item.images && item.images[0] ? (
@@ -458,7 +458,7 @@ function TrackOrderContent() {
                                 </div>
                               </div>
                               <span className="font-semibold text-ink shrink-0">
-                                ₹{Number(item.price) * Number(item.quantity)}
+                                ₹{Number(item.price || 0) * Number(item.quantity || 1)}
                               </span>
                             </div>
                           ))}

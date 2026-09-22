@@ -132,7 +132,7 @@ export async function DELETE(req: Request) {
         ? [...db.categories]
         : [...DEFAULT_CATEGORIES];
 
-    let currentProducts = db.products || [];
+    let currentProducts = Array.isArray(db.products) ? [...db.products] : [];
 
     if (isSupabaseConfigured()) {
       try {
@@ -146,18 +146,25 @@ export async function DELETE(req: Request) {
         if (cloudProds && Array.isArray(cloudProds)) {
           currentProducts = [...cloudProds];
         }
-      } catch {}
+      } catch (err: any) {
+        console.warn("[API Categories DELETE] Supabase sync fallback:", err.message);
+      }
     }
 
-    // Filter out the deleted category (case-insensitive)
-    currentCats = currentCats.filter(
-      (c) => c.trim().toLowerCase() !== name.toLowerCase()
-    );
+    // Filter out the deleted category (case-insensitive) safely
+    const nameLower = name.toLowerCase();
+    currentCats = currentCats
+      .filter((c): c is string => typeof c === "string" && Boolean(c.trim()))
+      .filter((c) => c.trim().toLowerCase() !== nameLower);
 
     // Also unassign this category from any products that currently have it
     let prodsChanged = false;
     currentProducts = currentProducts.map((p) => {
-      if (p.category && p.category.trim().toLowerCase() === name.toLowerCase()) {
+      if (
+        p &&
+        typeof p.category === "string" &&
+        p.category.trim().toLowerCase() === nameLower
+      ) {
         prodsChanged = true;
         return { ...p, category: "" };
       }
@@ -171,11 +178,15 @@ export async function DELETE(req: Request) {
     saveStore(db);
 
     if (isSupabaseConfigured()) {
-      const promises: Promise<any>[] = [saveCategoriesToSupabase(currentCats)];
-      if (prodsChanged) {
-        promises.push(saveProductsToSupabase(currentProducts));
+      try {
+        const promises: Promise<any>[] = [saveCategoriesToSupabase(currentCats)];
+        if (prodsChanged) {
+          promises.push(saveProductsToSupabase(currentProducts));
+        }
+        await Promise.all(promises);
+      } catch (saveErr: any) {
+        console.error("[API Categories DELETE] Supabase save warning:", saveErr.message);
       }
-      await Promise.all(promises);
     }
 
     try {

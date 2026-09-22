@@ -210,17 +210,19 @@ export default function Admin() {
         ? marketingTarget.product.images.filter(Boolean)
         : [];
     }
-    if (marketingTarget.type === "collection" && marketingTarget.category) {
-      const col = products.filter(
+    if (marketingTarget?.type === "collection" && marketingTarget.category) {
+      const targetCat = String(marketingTarget.category).trim().toLowerCase();
+      const col = (Array.isArray(products) ? products : []).filter(
         (p) =>
-          p.category &&
-          p.category.trim().toLowerCase() === marketingTarget.category!.trim().toLowerCase()
+          p &&
+          typeof p.category === "string" &&
+          p.category.trim().toLowerCase() === targetCat
       );
       const imgs: string[] = [];
       col.forEach((p) => {
         if (Array.isArray(p.images)) {
           p.images.forEach((img) => {
-            if (img && !imgs.includes(img)) imgs.push(img);
+            if (img && typeof img === "string" && !imgs.includes(img)) imgs.push(img);
           });
         }
       });
@@ -507,27 +509,29 @@ export default function Admin() {
   }
 
   function generateCollectionMarketingText(catName: string): string {
+    const safeCatName = typeof catName === "string" ? catName.trim() : "Handcrafted";
     const origin = getSiteOrigin();
-    const collectionUrl = `${origin}/?category=${encodeURIComponent(catName)}#shop`;
-    const colProds = products.filter(
-      (p) => p.category && p.category.trim().toLowerCase() === catName.trim().toLowerCase()
+    const collectionUrl = `${origin}/?category=${encodeURIComponent(safeCatName)}#shop`;
+    const targetCat = safeCatName.toLowerCase();
+    const colProds = (Array.isArray(products) ? products : []).filter(
+      (p) => p && typeof p.category === "string" && p.category.trim().toLowerCase() === targetCat
     );
 
     const lines: string[] = [
       `✨ *CANDLEMATE HANDCRAFTED COLLECTION* ✨`,
-      `🌿 *${catName.toUpperCase()} COLLECTION* 🕯️`,
+      `🌿 *${safeCatName.toUpperCase()} COLLECTION* 🕯️`,
       ``,
-      `Discover our curated artisanal candles in the *${catName}* collection, hand-poured with 100% pure plant soy wax and soothing fragrances:`,
+      `Discover our curated artisanal candles in the *${safeCatName}* collection, hand-poured with 100% pure plant soy wax and soothing fragrances:`,
       ``,
     ];
 
     if (colProds.length > 0) {
       colProds.forEach((p) => {
         const pUrl = `${origin}/products/${encodeURIComponent(p.id)}`;
-        let line = `• *${p.name.trim()}*`;
+        let line = `• *${(p.name || "Handmade Candle").trim()}*`;
         const extras: string[] = [];
-        if (p.fragrance) extras.push(`🌸 ${p.fragrance.trim()}`);
-        if (p.burnTime) extras.push(`⏳ ${p.burnTime.trim()}`);
+        if (p.fragrance && typeof p.fragrance === "string") extras.push(`🌸 ${p.fragrance.trim()}`);
+        if (p.burnTime && typeof p.burnTime === "string") extras.push(`⏳ ${p.burnTime.trim()}`);
         if (extras.length > 0) {
           line += ` (${extras.join(" · ")})`;
         }
@@ -995,17 +999,21 @@ export default function Admin() {
   // Filtered & Paginated Orders
   // ----------------------------------------------------
   const filteredOrders = useMemo(() => {
-    return orders
+    const list = Array.isArray(orders) ? orders : [];
+    return list
       .filter((o) => {
+        if (!o) return false;
         if (orderFilter !== "All" && o.status !== orderFilter) return false;
         if (!orderSearchQuery.trim()) return true;
-        const q = orderSearchQuery.toLowerCase();
-        return (
-          o.id.toLowerCase().includes(q) ||
-          o.customer.name.toLowerCase().includes(q) ||
-          o.customer.phone.toLowerCase().includes(q) ||
-          (o.customer.address && o.customer.address.toLowerCase().includes(q))
-        );
+        const q = orderSearchQuery.trim().toLowerCase();
+        const idMatch = typeof o.id === "string" && o.id.toLowerCase().includes(q);
+        const nameMatch =
+          typeof o.customer?.name === "string" && o.customer.name.toLowerCase().includes(q);
+        const phoneMatch =
+          typeof o.customer?.phone === "string" && o.customer.phone.toLowerCase().includes(q);
+        const addressMatch =
+          typeof o.customer?.address === "string" && o.customer.address.toLowerCase().includes(q);
+        return idMatch || nameMatch || phoneMatch || addressMatch;
       })
       .sort((a, b) => {
         if (orderSortBy === "newest") {
@@ -1013,7 +1021,7 @@ export default function Admin() {
         } else if (orderSortBy === "oldest") {
           return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
         } else {
-          return b.total - a.total;
+          return (Number(b.total) || 0) - (Number(a.total) || 0);
         }
       });
   }, [orders, orderFilter, orderSearchQuery, orderSortBy]);
@@ -1195,7 +1203,12 @@ export default function Admin() {
 
       // If a custom category was typed, auto-register it in categories
       const finalCategory = draft.category?.trim();
-      if (finalCategory && !allCategoriesList.some((c) => c.toLowerCase() === finalCategory.toLowerCase())) {
+      if (
+        finalCategory &&
+        !allCategoriesList.some(
+          (c) => typeof c === "string" && c.toLowerCase() === finalCategory.toLowerCase()
+        )
+      ) {
         fetch("/api/categories", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1393,7 +1406,12 @@ export default function Admin() {
 
       // If a custom category was typed, auto-register it in categories
       const finalCategory = editForm.category?.trim();
-      if (finalCategory && !allCategoriesList.some((c) => c.toLowerCase() === finalCategory.toLowerCase())) {
+      if (
+        finalCategory &&
+        !allCategoriesList.some(
+          (c) => typeof c === "string" && c.toLowerCase() === finalCategory.toLowerCase()
+        )
+      ) {
         fetch("/api/categories", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1478,27 +1496,34 @@ export default function Admin() {
   }
 
   async function handleDeleteCategory(catName: string) {
-    const usedCount = products.filter(
-      (p) => p.category && p.category.toLowerCase() === catName.toLowerCase()
+    const safeCatName = typeof catName === "string" ? catName.trim() : "";
+    if (!safeCatName) return;
+
+    const prods = Array.isArray(products) ? products : [];
+    const usedCount = prods.filter(
+      (p) =>
+        p &&
+        typeof p.category === "string" &&
+        p.category.trim().toLowerCase() === safeCatName.toLowerCase()
     ).length;
 
     if (usedCount > 0) {
       if (
         !confirm(
-          `"${catName}" is currently assigned to ${usedCount} candle(s). Are you sure you want to remove this collection? Candles in this collection will become uncategorized.`
+          `"${safeCatName}" is currently assigned to ${usedCount} candle(s). Are you sure you want to remove this collection? Candles in this collection will become uncategorized.`
         )
       ) {
         return;
       }
     } else {
-      if (!confirm(`Remove collection "${catName}"?`)) return;
+      if (!confirm(`Remove collection "${safeCatName}"?`)) return;
     }
 
     try {
       const res = await fetch("/api/categories", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: catName }),
+        body: JSON.stringify({ name: safeCatName }),
       });
       const data = await res.json();
       if (res.ok && Array.isArray(data.categories)) {
@@ -1507,30 +1532,39 @@ export default function Admin() {
           setProducts(data.products);
         } else {
           setProducts((prev) =>
-            prev.map((p) =>
-              p.category && p.category.toLowerCase() === catName.toLowerCase()
+            (Array.isArray(prev) ? prev : []).map((p) =>
+              p &&
+              typeof p.category === "string" &&
+              p.category.trim().toLowerCase() === safeCatName.toLowerCase()
                 ? { ...p, category: "" }
                 : p
             )
           );
         }
-        if (productCategoryFilter.toLowerCase() === catName.toLowerCase()) {
+        if (
+          typeof productCategoryFilter === "string" &&
+          productCategoryFilter.toLowerCase() === safeCatName.toLowerCase()
+        ) {
           setProductCategoryFilter("All");
         }
         if (
           marketingTarget?.type === "collection" &&
-          marketingTarget.category?.toLowerCase() === catName.toLowerCase()
+          typeof marketingTarget.category === "string" &&
+          marketingTarget.category.toLowerCase() === safeCatName.toLowerCase()
         ) {
-          const remaining = data.categories.filter(
-            (c: string) => c.toLowerCase() !== catName.toLowerCase()
-          );
+          const remaining = Array.isArray(data.categories)
+            ? data.categories.filter(
+                (c: string) =>
+                  typeof c === "string" && c.toLowerCase() !== safeCatName.toLowerCase()
+              )
+            : [];
           setMarketingTarget(
             remaining.length > 0
               ? { type: "collection", category: remaining[0] }
               : null
           );
         }
-        setNotice(`✓ Collection "${catName}" removed.`);
+        setNotice(`✓ Collection "${safeCatName}" removed.`);
       } else {
         setNotice(data.error || "Failed to delete collection.");
       }
@@ -1571,23 +1605,34 @@ export default function Admin() {
   // Filtered Products
   // ----------------------------------------------------
   const filteredProducts = useMemo(() => {
-    return products.filter((p) => {
-      if (productCategoryFilter !== "All" && p.category !== productCategoryFilter) return false;
-      if (!productSearchQuery.trim()) return true;
-      const q = productSearchQuery.toLowerCase();
+    const prods = Array.isArray(products) ? products : [];
+    return prods.filter((p) => {
+      if (!p) return false;
+      if (
+        productCategoryFilter !== "All" &&
+        (!p.category ||
+          typeof p.category !== "string" ||
+          p.category.trim().toLowerCase() !== String(productCategoryFilter).trim().toLowerCase())
+      ) {
+        return false;
+      }
+      if (!productSearchQuery || !productSearchQuery.trim()) return true;
+      const q = productSearchQuery.trim().toLowerCase();
       return (
-        p.name.toLowerCase().includes(q) ||
-        (p.description && p.description.toLowerCase().includes(q)) ||
-        (p.fragrance && p.fragrance.toLowerCase().includes(q))
+        (typeof p.name === "string" && p.name.toLowerCase().includes(q)) ||
+        (typeof p.description === "string" && p.description.toLowerCase().includes(q)) ||
+        (typeof p.fragrance === "string" && p.fragrance.toLowerCase().includes(q))
       );
     });
   }, [products, productCategoryFilter, productSearchQuery]);
 
   const allCategoriesList = useMemo(() => {
     const cats = new Set<string>();
-    categories.forEach((c) => {
-      if (c && c.trim()) cats.add(c.trim());
-    });
+    if (Array.isArray(categories)) {
+      categories.forEach((c) => {
+        if (c && typeof c === "string" && c.trim()) cats.add(c.trim());
+      });
+    }
     return Array.from(cats);
   }, [categories]);
 
@@ -2561,8 +2606,13 @@ export default function Admin() {
               {/* Badges List with counts and delete */}
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar sm:flex-wrap">
                 {allCategoriesList.map((cat) => {
-                  const count = products.filter(
-                    (p) => p.category && p.category.toLowerCase() === cat.toLowerCase()
+                  if (!cat || typeof cat !== "string") return null;
+                  const catLower = cat.trim().toLowerCase();
+                  const count = (Array.isArray(products) ? products : []).filter(
+                    (p) =>
+                      p &&
+                      typeof p.category === "string" &&
+                      p.category.trim().toLowerCase() === catLower
                   ).length;
                   return (
                     <div

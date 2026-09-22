@@ -23,7 +23,7 @@ export function ProductCard({ product }: { product: Product }) {
   const handleQuickAdd = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!product.available) return;
+    if (!product || !product.available) return;
     add(product);
     setJustAdded(true);
     setTimeout(() => setJustAdded(false), 1800);
@@ -77,9 +77,13 @@ export function ProductCard({ product }: { product: Product }) {
         </div>
 
         <div className="mt-3 pt-2.5 border-t border-[#8a614812] flex items-center justify-between gap-1.5">
-          <span className="text-[9px] sm:text-[11px] font-bold uppercase tracking-[.14em] text-moss truncate">
-            {product.category}
-          </span>
+          {product.category ? (
+            <span className="text-[9px] sm:text-[11px] font-bold uppercase tracking-[.14em] text-moss truncate">
+              {product.category}
+            </span>
+          ) : (
+            <span />
+          )}
           <button
             type="button"
             onClick={handleQuickAdd}

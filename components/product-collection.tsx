@@ -9,7 +9,8 @@ interface ProductCollectionProps {
   initialCategories?: string[];
 }
 
-function getCategoryIcon(categoryName: string): string {
+function getCategoryIcon(categoryName?: string | null): string {
+  if (!categoryName || typeof categoryName !== "string") return "✨";
   const lower = categoryName.toLowerCase();
   if (lower.includes("jar")) return "🕯️";
   if (lower.includes("sculpt")) return "🗿";
@@ -26,8 +27,8 @@ export function ProductCollection({
   initialProducts,
   initialCategories = [],
 }: ProductCollectionProps) {
-  const [products, setProducts] = useState<Product[]>(initialProducts);
-  const [categories, setCategories] = useState<string[]>(initialCategories);
+  const [products, setProducts] = useState<Product[]>(Array.isArray(initialProducts) ? initialProducts : []);
+  const [categories, setCategories] = useState<string[]>(Array.isArray(initialCategories) ? initialCategories : []);
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
 
@@ -120,17 +121,22 @@ export function ProductCollection({
   // Compute all available categories from active categories
   const allCategoryList = useMemo(() => {
     const list = new Set<string>();
-    categories.forEach((c) => {
-      if (c && c.trim()) list.add(c.trim());
-    });
+    if (Array.isArray(categories)) {
+      categories.forEach((c) => {
+        if (c && typeof c === "string" && c.trim()) list.add(c.trim());
+      });
+    }
     return Array.from(list);
   }, [categories]);
 
   // Reset selected category to "All" if it was deleted
   useEffect(() => {
     if (
+      selectedCategory &&
       selectedCategory !== "All" &&
-      !allCategoryList.some((c) => c.toLowerCase() === selectedCategory.toLowerCase())
+      !allCategoryList.some(
+        (c) => typeof c === "string" && c.toLowerCase() === String(selectedCategory).toLowerCase()
+      )
     ) {
       setSelectedCategory("All");
     }
@@ -138,9 +144,10 @@ export function ProductCollection({
 
   // Counts per category
   const categoryCounts = useMemo(() => {
-    const counts: Record<string, number> = { All: products.length };
-    products.forEach((p) => {
-      const cat = p.category ? p.category.trim() : "";
+    const prods = Array.isArray(products) ? products : [];
+    const counts: Record<string, number> = { All: prods.length };
+    prods.forEach((p) => {
+      const cat = p && p.category && typeof p.category === "string" ? p.category.trim() : "";
       if (cat) {
         counts[cat] = (counts[cat] || 0) + 1;
       }
@@ -150,9 +157,11 @@ export function ProductCollection({
 
   // Filtered products list
   const filteredProducts = useMemo(() => {
-    if (selectedCategory === "All") return products;
-    return products.filter(
-      (p) => p.category && p.category.trim().toLowerCase() === selectedCategory.toLowerCase()
+    const prods = Array.isArray(products) ? products : [];
+    if (!selectedCategory || selectedCategory === "All") return prods;
+    const selLower = String(selectedCategory).trim().toLowerCase();
+    return prods.filter(
+      (p) => p && typeof p.category === "string" && p.category.trim().toLowerCase() === selLower
     );
   }, [products, selectedCategory]);
 
@@ -375,7 +384,8 @@ export function ProductCollection({
 
           {/* Individual Categories */}
           {allCategoryList.map((cat) => {
-            const isSelected = selectedCategory.toLowerCase() === cat.toLowerCase();
+            if (!cat || typeof cat !== "string") return null;
+            const isSelected = String(selectedCategory || "").toLowerCase() === cat.toLowerCase();
             const count = categoryCounts[cat] || 0;
             const icon = getCategoryIcon(cat);
 

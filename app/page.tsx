@@ -18,7 +18,7 @@ const DEFAULT_CATEGORIES = [
 
 export default async function Home() {
   const store = getStore();
-  let products = store.products || [];
+  let products = Array.isArray(store.products) ? store.products : [];
   let categories =
     Array.isArray(store.categories) && store.categories.length > 0
       ? [...store.categories]
@@ -36,10 +36,18 @@ export default async function Home() {
       if (cloudCategories && Array.isArray(cloudCategories)) {
         categories = cloudCategories;
       }
-    } catch {}
+    } catch (err: any) {
+      console.warn("[Home SSR] Supabase sync fallback:", err.message);
+    }
   }
 
-  const uniqueCategories = Array.from(new Set(categories.map((c) => c.trim()).filter(Boolean)));
+  const uniqueCategories = Array.from(
+    new Set(
+      (Array.isArray(categories) ? categories : [])
+        .filter((c): c is string => typeof c === "string" && Boolean(c.trim()))
+        .map((c) => c.trim())
+    )
+  );
 
   return (
     <>

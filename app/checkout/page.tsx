@@ -219,12 +219,15 @@ export default function Checkout() {
     }
   }
 
-  const orderCandles = placedOrder?.items || order?.items || items;
-  const displayTotal = placedOrder?.total ?? order?.total ?? total;
+  const orderCandles =
+    (Array.isArray(placedOrder?.items) && placedOrder.items) ||
+    (Array.isArray(order?.items) && order.items) ||
+    (Array.isArray(items) ? items : []);
+  const displayTotal = placedOrder?.total ?? order?.total ?? total ?? 0;
   const displayId = placedOrder?.id || order?.id || "CM-STUDIO";
-  const displayName = placedOrder?.customer?.name || form.name;
-  const displayPhone = placedOrder?.customer?.phone || form.phone;
-  const displayAddress = placedOrder?.customer?.address || form.address;
+  const displayName = placedOrder?.customer?.name || form.name || "Customer";
+  const displayPhone = placedOrder?.customer?.phone || form.phone || "";
+  const displayAddress = placedOrder?.customer?.address || form.address || "";
 
   return (
     <>
