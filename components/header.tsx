@@ -30,16 +30,63 @@ export function Header() {
     };
   }, [pathname]);
 
+  const handleOpenCollections = () => {
+    if (pathname === "/") {
+      window.dispatchEvent(new CustomEvent("candlemate-open-collections"));
+    } else {
+      window.location.href = "/?openCollections=true#shop";
+    }
+  };
+
   return (
     <header className="sticky top-0 z-40 border-b border-[#5c39271a] bg-[#fff8ed]/95 backdrop-blur transition-all">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-3.5 sm:px-5 py-3 sm:py-4">
-        <Link href="/" className="flex items-center group shrink-0">
-          <img
-            src="/logo-wordmark.png"
-            alt="Candlemate"
-            className="h-5 sm:h-6 max-h-7 w-auto object-contain transition-opacity duration-300 group-hover:opacity-90"
-          />
-        </Link>
+        {/* Left: Collection Button with 3 waving ocean lines + Candlemate Logo */}
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <button
+            type="button"
+            onClick={handleOpenCollections}
+            className="group flex items-center gap-1.5 sm:gap-2 rounded-full border border-[#8a614830] bg-[#fffaf3] sm:bg-transparent px-2.5 py-1.5 sm:px-3 sm:py-1.5 hover:bg-[#8a614815] hover:border-clay/50 text-ink transition text-xs sm:text-sm shrink-0 shadow-2xs sm:shadow-none active:scale-95 cursor-pointer"
+            title="Browse candle collections"
+            aria-label="Candle Collections"
+          >
+            <div className="relative w-[22px] h-[16px] flex items-center justify-center overflow-hidden">
+              <svg
+                viewBox="0 0 24 18"
+                className="w-full h-full overflow-hidden text-ink group-hover:text-clay transition-colors"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path
+                  d="M -12 3 Q -9 1.8, -6 3 T 0 3 T 6 3 T 12 3 T 18 3 T 24 3 T 30 3 T 36 3"
+                  className="animate-ocean-wave-1"
+                />
+                <path
+                  d="M -12 9 Q -9 7.8, -6 9 T 0 9 T 6 9 T 12 9 T 18 9 T 24 9 T 30 9 T 36 9"
+                  className="animate-ocean-wave-2"
+                />
+                <path
+                  d="M -12 15 Q -9 13.8, -6 15 T 0 15 T 6 15 T 12 15 T 18 15 T 24 15 T 30 15 T 36 15"
+                  className="animate-ocean-wave-3"
+                />
+              </svg>
+            </div>
+            <span className="text-[11px] sm:text-xs font-semibold text-ink/90 group-hover:text-clay transition tracking-wide hidden xs:inline">
+              Collections
+            </span>
+          </button>
+
+          <Link href="/" className="flex items-center group shrink-0" title="Candlemate Home">
+            <img
+              src="/logo-wordmark.png"
+              alt="Candlemate"
+              className="h-5 sm:h-6 max-h-7 w-auto object-contain transition-opacity duration-300 group-hover:opacity-90"
+            />
+          </Link>
+        </div>
 
         <nav className="flex items-center gap-2 sm:gap-6 text-sm shrink-0">
           <a href="/#shop" className="hidden md:block hover:text-clay transition font-medium">

@@ -39,3 +39,29 @@ button, input, textarea, select { font: inherit; }
 .animate-float-badge {
   animation: float-badge 1.4s ease-out forwards;
 }
+
+@keyframes ocean-wave-shift {
+  0% {
+    transform: translateX(-12px);
+  }
+  100% {
+    transform: translateX(0px);
+  }
+}
+
+.animate-ocean-wave-1 {
+  animation: ocean-wave-shift 2.6s linear infinite;
+  will-change: transform;
+}
+
+.animate-ocean-wave-2 {
+  animation: ocean-wave-shift 2.1s linear infinite;
+  animation-delay: -0.6s;
+  will-change: transform;
+}
+
+.animate-ocean-wave-3 {
+  animation: ocean-wave-shift 2.9s linear infinite;
+  animation-delay: -1.2s;
+  will-change: transform;
+}
