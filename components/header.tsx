@@ -41,22 +41,22 @@ export function Header() {
   return (
     <header className="sticky top-0 z-40 border-b border-[#5c39271a] bg-[#fff8ed]/95 backdrop-blur transition-all">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-3.5 sm:px-5 py-3 sm:py-4">
-        {/* Left: Collection Button with 3 waving ocean lines + Candlemate Logo */}
+        {/* Left: Tactile Oval Collection Button with 3 waving ocean lines + Candlemate Logo */}
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           <button
             type="button"
             onClick={handleOpenCollections}
-            className="group flex items-center gap-1.5 sm:gap-2 rounded-full border border-[#8a614830] bg-[#fffaf3] sm:bg-transparent px-2.5 py-1.5 sm:px-3 sm:py-1.5 hover:bg-[#8a614815] hover:border-clay/50 text-ink transition text-xs sm:text-sm shrink-0 shadow-2xs sm:shadow-none active:scale-95 cursor-pointer"
-            title="Browse candle collections"
-            aria-label="Candle Collections"
+            className="group flex items-center justify-center rounded-full bg-[#fceddc] hover:bg-[#f7dfc8] active:bg-[#ecd0b4] border-[1.5px] border-[#8a5d43]/40 hover:border-clay text-ink px-2.5 py-1 sm:px-3 sm:py-1.5 shadow-[0_1px_3px_rgba(45,27,22,0.12)] hover:shadow-[0_2px_6px_rgba(174,99,62,0.22)] active:scale-90 transition-all duration-200 cursor-pointer select-none touch-manipulation shrink-0"
+            title="Browse Collections"
+            aria-label="Browse Collections"
           >
-            <div className="relative w-[22px] h-[16px] flex items-center justify-center overflow-hidden">
+            <div className="relative w-[22px] h-[14px] sm:w-[24px] sm:h-[15px] flex items-center justify-center overflow-hidden">
               <svg
                 viewBox="0 0 24 18"
-                className="w-full h-full overflow-hidden text-ink group-hover:text-clay transition-colors"
+                className="w-full h-full overflow-hidden text-ink group-hover:text-clay transition-colors duration-300"
                 fill="none"
                 stroke="currentColor"
-                strokeWidth="2"
+                strokeWidth="2.2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               >
@@ -74,9 +74,6 @@ export function Header() {
                 />
               </svg>
             </div>
-            <span className="text-[11px] sm:text-xs font-semibold text-ink/90 group-hover:text-clay transition tracking-wide hidden xs:inline">
-              Collections
-            </span>
           </button>
 
           <Link href="/" className="flex items-center group shrink-0" title="Candlemate Home">
