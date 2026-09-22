@@ -64,14 +64,14 @@ export function ProductCollection({
 
         if (prodsRes.ok) {
           const prodsData = await prodsRes.json();
-          if (active && Array.isArray(prodsData) && prodsData.length > 0) {
+          if (active && Array.isArray(prodsData)) {
             setProducts(prodsData);
           }
         }
 
         if (catsRes.ok) {
           const catsData = await catsRes.json();
-          if (active && Array.isArray(catsData) && catsData.length > 0) {
+          if (active && Array.isArray(catsData)) {
             setCategories(catsData);
           }
         }
@@ -117,17 +117,24 @@ export function ProductCollection({
     };
   }, [isDrawerOpen]);
 
-  // Compute all available categories
+  // Compute all available categories from active categories
   const allCategoryList = useMemo(() => {
     const list = new Set<string>();
     categories.forEach((c) => {
       if (c && c.trim()) list.add(c.trim());
     });
-    products.forEach((p) => {
-      if (p.category && p.category.trim()) list.add(p.category.trim());
-    });
     return Array.from(list);
-  }, [categories, products]);
+  }, [categories]);
+
+  // Reset selected category to "All" if it was deleted
+  useEffect(() => {
+    if (
+      selectedCategory !== "All" &&
+      !allCategoryList.some((c) => c.toLowerCase() === selectedCategory.toLowerCase())
+    ) {
+      setSelectedCategory("All");
+    }
+  }, [allCategoryList, selectedCategory]);
 
   // Counts per category
   const categoryCounts = useMemo(() => {

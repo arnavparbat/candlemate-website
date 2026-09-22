@@ -184,14 +184,7 @@ export default function Admin() {
   const [productCategoryFilter, setProductCategoryFilter] = useState("All");
 
   // Category Management States
-  const [categories, setCategories] = useState<string[]>([
-    "Jar candle",
-    "Sculptural",
-    "Flower candle",
-    "Tin candle",
-    "Wax melts",
-    "Aromatherapy",
-  ]);
+  const [categories, setCategories] = useState<string[]>([]);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [isAddingCategory, setIsAddingCategory] = useState(false);
   const [isCustomCategoryDraft, setIsCustomCategoryDraft] = useState(false);
@@ -732,7 +725,7 @@ export default function Admin() {
       setOrders(Array.isArray(o) ? o : []);
       setProducts(Array.isArray(p) ? p : []);
       setUpi(s.upiId || "");
-      if (Array.isArray(cats) && cats.length > 0) {
+      if (Array.isArray(cats)) {
         setCategories(cats);
       }
 
@@ -1490,11 +1483,15 @@ export default function Admin() {
     ).length;
 
     if (usedCount > 0) {
-      if (!confirm(`"${catName}" is currently assigned to ${usedCount} candle(s). Are you sure you want to remove it?`)) {
+      if (
+        !confirm(
+          `"${catName}" is currently assigned to ${usedCount} candle(s). Are you sure you want to remove this collection? Candles in this collection will become uncategorized.`
+        )
+      ) {
         return;
       }
     } else {
-      if (!confirm(`Remove category "${catName}"?`)) return;
+      if (!confirm(`Remove collection "${catName}"?`)) return;
     }
 
     try {
@@ -1506,10 +1503,39 @@ export default function Admin() {
       const data = await res.json();
       if (res.ok && Array.isArray(data.categories)) {
         setCategories(data.categories);
-        setNotice(`✓ Category "${catName}" removed.`);
+        if (Array.isArray(data.products)) {
+          setProducts(data.products);
+        } else {
+          setProducts((prev) =>
+            prev.map((p) =>
+              p.category && p.category.toLowerCase() === catName.toLowerCase()
+                ? { ...p, category: "" }
+                : p
+            )
+          );
+        }
+        if (productCategoryFilter.toLowerCase() === catName.toLowerCase()) {
+          setProductCategoryFilter("All");
+        }
+        if (
+          marketingTarget?.type === "collection" &&
+          marketingTarget.category?.toLowerCase() === catName.toLowerCase()
+        ) {
+          const remaining = data.categories.filter(
+            (c: string) => c.toLowerCase() !== catName.toLowerCase()
+          );
+          setMarketingTarget(
+            remaining.length > 0
+              ? { type: "collection", category: remaining[0] }
+              : null
+          );
+        }
+        setNotice(`✓ Collection "${catName}" removed.`);
+      } else {
+        setNotice(data.error || "Failed to delete collection.");
       }
     } catch {
-      setNotice("Failed to delete category.");
+      setNotice("Failed to delete collection.");
     }
   }
 
@@ -1562,11 +1588,8 @@ export default function Admin() {
     categories.forEach((c) => {
       if (c && c.trim()) cats.add(c.trim());
     });
-    products.forEach((p) => {
-      if (p.category && p.category.trim()) cats.add(p.category.trim());
-    });
     return Array.from(cats);
-  }, [categories, products]);
+  }, [categories]);
 
   const productCategories = useMemo(() => {
     return ["All", ...allCategoriesList];
@@ -2941,6 +2964,10 @@ export default function Admin() {
                       }}
                       className="w-full rounded-xl border border-[#8a614830] bg-white px-3.5 py-2.5 text-sm text-ink outline-clay shadow-2xs cursor-pointer font-medium"
                     >
+                      {!draft.category && <option value="">Select a collection / category</option>}
+                      {draft.category && !allCategoriesList.includes(draft.category) && (
+                        <option value={draft.category}>{draft.category}</option>
+                      )}
                       {allCategoriesList.map((c) => (
                         <option key={c} value={c}>
                           {c}
@@ -3309,6 +3336,10 @@ export default function Admin() {
                         }}
                         className="w-full rounded-xl border border-[#8a614830] bg-white px-3.5 py-2.5 text-sm text-ink outline-clay shadow-2xs font-medium cursor-pointer"
                       >
+                        {!editForm.category && <option value="">Uncategorized</option>}
+                        {editForm.category && !allCategoriesList.includes(editForm.category) && (
+                          <option value={editForm.category}>{editForm.category}</option>
+                        )}
                         {allCategoriesList.map((c) => (
                           <option key={c} value={c}>
                             {c}

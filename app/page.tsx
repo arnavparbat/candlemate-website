@@ -12,15 +12,17 @@ const DEFAULT_CATEGORIES = [
   "Jar candle",
   "Sculptural",
   "Flower candle",
-  "Tin candle",
   "Wax melts",
   "Aromatherapy",
 ];
 
 export default async function Home() {
   const store = getStore();
-  let products = store.products;
-  let categories = [...DEFAULT_CATEGORIES, ...(store.categories || [])];
+  let products = store.products || [];
+  let categories =
+    Array.isArray(store.categories) && store.categories.length > 0
+      ? [...store.categories]
+      : [...DEFAULT_CATEGORIES];
 
   if (isSupabaseConfigured()) {
     try {
@@ -28,11 +30,11 @@ export default async function Home() {
         fetchProductsFromSupabase(),
         fetchCategoriesFromSupabase(),
       ]);
-      if (cloudProducts && Array.isArray(cloudProducts) && cloudProducts.length > 0) {
+      if (cloudProducts && Array.isArray(cloudProducts)) {
         products = cloudProducts;
       }
-      if (cloudCategories && Array.isArray(cloudCategories) && cloudCategories.length > 0) {
-        categories = [...categories, ...cloudCategories];
+      if (cloudCategories && Array.isArray(cloudCategories)) {
+        categories = cloudCategories;
       }
     } catch {}
   }

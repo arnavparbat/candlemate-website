@@ -4,6 +4,7 @@ import {
   fetchCategoriesFromSupabase,
   saveCategoriesToSupabase,
   fetchProductsFromSupabase,
+  saveProductsToSupabase,
 } from "@/lib/supabase";
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
@@ -15,51 +16,34 @@ const DEFAULT_CATEGORIES = [
   "Jar candle",
   "Sculptural",
   "Flower candle",
-  "Tin candle",
   "Wax melts",
   "Aromatherapy",
 ];
 
 export async function GET() {
-  let categories: string[] = [...DEFAULT_CATEGORIES];
   const db = getStore();
-
-  if (Array.isArray(db.categories)) {
-    categories.push(...db.categories);
-  }
-
-  let products = db.products || [];
+  let categories: string[] =
+    Array.isArray(db.categories) && db.categories.length > 0
+      ? [...db.categories]
+      : [...DEFAULT_CATEGORIES];
 
   if (isSupabaseConfigured()) {
     try {
-      const [cloudCats, cloudProds] = await Promise.all([
-        fetchCategoriesFromSupabase(),
-        fetchProductsFromSupabase(),
-      ]);
-
+      const cloudCats = await fetchCategoriesFromSupabase();
       if (cloudCats && Array.isArray(cloudCats)) {
-        categories.push(...cloudCats);
-      }
-      if (cloudProds && Array.isArray(cloudProds)) {
-        products = cloudProds;
+        // Cloud categories in Supabase is the true source of truth
+        categories = cloudCats;
       }
     } catch (err: any) {
       console.warn("[API Categories GET] Cloud sync notice:", err.message);
     }
   }
 
-  // Include categories tagged on any active products
-  products.forEach((p) => {
-    if (p.category && typeof p.category === "string" && p.category.trim()) {
-      categories.push(p.category.trim());
-    }
-  });
-
   // Deduplicate while preserving order
   const seen = new Set<string>();
   const uniqueCategories: string[] = [];
   categories.forEach((cat) => {
-    const cleaned = cat.trim();
+    const cleaned = typeof cat === "string" ? cat.trim() : "";
     const lower = cleaned.toLowerCase();
     if (cleaned && !seen.has(lower)) {
       seen.add(lower);
@@ -87,15 +71,16 @@ export async function POST(req: Request) {
     }
 
     const db = getStore();
-    let currentCats: string[] = Array.isArray(db.categories)
-      ? [...db.categories]
-      : [...DEFAULT_CATEGORIES];
+    let currentCats: string[] =
+      Array.isArray(db.categories) && db.categories.length > 0
+        ? [...db.categories]
+        : [...DEFAULT_CATEGORIES];
 
     if (isSupabaseConfigured()) {
       try {
         const cloudCats = await fetchCategoriesFromSupabase();
         if (cloudCats && Array.isArray(cloudCats)) {
-          currentCats = Array.from(new Set([...currentCats, ...cloudCats]));
+          currentCats = [...cloudCats];
         }
       } catch {}
     }
@@ -142,28 +127,55 @@ export async function DELETE(req: Request) {
     }
 
     const db = getStore();
-    let currentCats: string[] = Array.isArray(db.categories)
-      ? [...db.categories]
-      : [...DEFAULT_CATEGORIES];
+    let currentCats: string[] =
+      Array.isArray(db.categories) && db.categories.length > 0
+        ? [...db.categories]
+        : [...DEFAULT_CATEGORIES];
+
+    let currentProducts = db.products || [];
 
     if (isSupabaseConfigured()) {
       try {
-        const cloudCats = await fetchCategoriesFromSupabase();
+        const [cloudCats, cloudProds] = await Promise.all([
+          fetchCategoriesFromSupabase(),
+          fetchProductsFromSupabase(),
+        ]);
         if (cloudCats && Array.isArray(cloudCats)) {
-          currentCats = cloudCats;
+          currentCats = [...cloudCats];
+        }
+        if (cloudProds && Array.isArray(cloudProds)) {
+          currentProducts = [...cloudProds];
         }
       } catch {}
     }
 
+    // Filter out the deleted category (case-insensitive)
     currentCats = currentCats.filter(
-      (c) => c.toLowerCase() !== name.toLowerCase()
+      (c) => c.trim().toLowerCase() !== name.toLowerCase()
     );
 
+    // Also unassign this category from any products that currently have it
+    let prodsChanged = false;
+    currentProducts = currentProducts.map((p) => {
+      if (p.category && p.category.trim().toLowerCase() === name.toLowerCase()) {
+        prodsChanged = true;
+        return { ...p, category: "" };
+      }
+      return p;
+    });
+
     db.categories = currentCats;
+    if (prodsChanged) {
+      db.products = currentProducts;
+    }
     saveStore(db);
 
     if (isSupabaseConfigured()) {
-      await saveCategoriesToSupabase(currentCats);
+      const promises: Promise<any>[] = [saveCategoriesToSupabase(currentCats)];
+      if (prodsChanged) {
+        promises.push(saveProductsToSupabase(currentProducts));
+      }
+      await Promise.all(promises);
     }
 
     try {
@@ -171,7 +183,11 @@ export async function DELETE(req: Request) {
       revalidatePath("/admin");
     } catch {}
 
-    return NextResponse.json({ ok: true, categories: currentCats });
+    return NextResponse.json({
+      ok: true,
+      categories: currentCats,
+      products: currentProducts,
+    });
   } catch (err: any) {
     console.error("[API Categories DELETE Error]", err);
     return NextResponse.json(
